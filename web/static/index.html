@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElvisPOS Remote Terminal</title>
+<link rel="icon" type="image/png" href="elvispos-logo.png">
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- Login -->
+<main id="login" class="login" hidden>
+  <form id="login-form" class="login-card">
+    <img src="elvispos-logo.png" alt="ElvisPOS" class="login-logo">
+    <div class="login-title"><b>ElvisPOS</b> Remote Terminal</div>
+    <p class="muted" data-i18n="login.tagline">Terminals and commands for every POS</p>
+    <label><span data-i18n="login.user">User</span> <input name="user" autocomplete="username" value="admin" required></label>
+    <label><span data-i18n="login.password">Password</span> <input name="password" type="password" autocomplete="current-password" required autofocus></label>
+    <button type="submit" class="btn primary" data-i18n="login.signin">Sign in</button>
+    <p id="login-error" class="error" hidden></p>
+    <label class="login-lang"><span data-i18n="lang.label">Language</span> <select class="lang-select" aria-label="Language"><option value="en">English</option><option value="it">Italiano</option></select></label>
+  </form>
+</main>
+
+<!-- App -->
+<div id="app" class="app" hidden>
+  <aside class="sidebar">
+    <header class="side-head">
+      <div class="brand">
+        <img src="elvispos-logo.png" alt="" class="brand-logo">
+        <div class="brand-text"><b>ElvisPOS</b><span>Remote Terminal</span></div>
+      </div>
+      <div class="side-actions">
+        <select class="lang-select small" aria-label="Language" title="Language / Lingua"><option value="en">EN</option><option value="it">IT</option></select>
+        <button id="logout" class="btn ghost small" data-i18n="signout">Sign out</button>
+      </div>
+    </header>
+
+    <div class="stats">
+      <div><b id="stat-online">0</b><span data-i18n="stats.online">POS online</span></div>
+      <div><b id="stat-total">0</b><span data-i18n="stats.known">POS known</span></div>
+      <div><b id="stat-stores">0</b><span data-i18n="stats.stores">stores up</span></div>
+    </div>
+
+    <div class="filters">
+      <input id="search" type="search" placeholder="Search store, POS, IP…" data-i18n-placeholder="search.placeholder" autocomplete="off">
+      <div id="filter-seg" class="seg" role="tablist">
+        <button data-filter="all" class="on" data-i18n="filter.all">All</button>
+        <button data-filter="online" data-i18n="filter.online">Online</button>
+        <button data-filter="offline" data-i18n="filter.offline">Offline</button>
+      </div>
+      <div class="sort-row">
+        <span class="muted" data-i18n="sort.label">Sort</span>
+        <div id="sort-seg" class="seg">
+          <button data-sort="az" data-i18n="sort.az">A–Z</button>
+          <button data-sort="store" data-i18n="sort.store">Store ID</button>
+        </div>
+      </div>
+      <label class="select-all"><input id="select-all" type="checkbox"> <span data-i18n="select.shown">Select shown</span> <span id="sel-count" class="muted"></span></label>
+    </div>
+
+    <div id="agents" class="agents"></div>
+    <p id="agents-empty" class="empty" hidden data-i18n="agents.empty">No POS match.</p>
+  </aside>
+
+  <section class="main">
+    <div class="tabbar">
+      <nav id="tabs" class="tabs">
+        <button class="tab on" data-tab="fleet"><span class="tab-label" data-i18n="tab.fleet">Fleet</span></button>
+      </nav>
+      <div id="layout" class="layout-btns" hidden>
+        <button id="sync-btn" class="sync-btn" disabled data-i18n="sync.button">Type in all</button>
+        <button data-layout="1" title="One terminal" data-i18n-title="layout.1"><svg viewBox="0 0 16 12"><rect x="1" y="1" width="14" height="10" rx="1.5"/></svg></button>
+        <button data-layout="2" title="Two terminals side by side" data-i18n-title="layout.2"><svg viewBox="0 0 16 12"><rect x="1" y="1" width="6.3" height="10" rx="1.5"/><rect x="8.7" y="1" width="6.3" height="10" rx="1.5"/></svg></button>
+        <button data-layout="4" title="Four terminals" data-i18n-title="layout.4"><svg viewBox="0 0 16 12"><rect x="1" y="1" width="6.3" height="4.3" rx="1.2"/><rect x="8.7" y="1" width="6.3" height="4.3" rx="1.2"/><rect x="1" y="6.7" width="6.3" height="4.3" rx="1.2"/><rect x="8.7" y="6.7" width="6.3" height="4.3" rx="1.2"/></svg></button>
+      </div>
+    </div>
+
+    <div id="panes" class="panes">
+      <div class="pane fleet on" data-pane="fleet">
+        <section class="card">
+          <h2 data-i18n="exec.title">Run a command</h2>
+          <p class="muted" data-i18n-html="exec.desc_html"></p>
+          <textarea id="exec-cmd" rows="3" spellcheck="false" placeholder="uptime; df -h /"></textarea>
+          <div class="row">
+            <label class="muted"><span data-i18n="exec.timeout">Timeout</span>
+              <select id="exec-timeout">
+                <option value="10">10 s</option><option value="30" selected>30 s</option>
+                <option value="120">2 min</option><option value="600">10 min</option>
+              </select>
+            </label>
+            <span class="spacer"></span>
+            <button id="exec-run" class="btn primary" disabled>Run on 0 selected</button>
+          </div>
+          <div id="exec-results" class="results"></div>
+        </section>
+
+        <section id="upstream-card" class="card" hidden>
+          <h2 data-i18n="upstream.title">Linked to central</h2>
+          <p class="muted" data-i18n-html="upstream.desc_html"></p>
+        </section>
+
+        <section id="stores-card" class="card" hidden>
+          <h2 data-i18n="stores.title">Stores</h2>
+          <p class="muted" data-i18n-html="stores.desc_html"></p>
+          <div id="stores-list" class="stores"></div>
+        </section>
+
+        <section id="store-setup-card" class="card" hidden>
+          <h2 data-i18n="addStore.title">Add a store</h2>
+          <p class="muted" data-i18n-html="addStore.desc_html"></p>
+          <div class="codebox"><code id="store-setup" class="pre"></code><button class="btn small copy" data-copy="store-setup" data-i18n="copy">Copy</button></div>
+        </section>
+
+        <section class="card">
+          <h2 id="install-title">Add a POS</h2>
+          <p class="muted" data-i18n-html="addPos.desc_html"></p>
+          <div class="codebox"><code id="install-cmd">ecli rterm install</code><button class="btn small copy" data-copy="install-cmd" data-i18n="copy">Copy</button></div>
+          <p class="muted small" data-i18n-html="addPos.options_html"></p>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+  // noVNC (MPL-2.0) is an ES module; expose its client to app.js.
+  import RFB from "./vendor/novnc/core/rfb.js";
+  window.RFB = RFB;
+</script>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
