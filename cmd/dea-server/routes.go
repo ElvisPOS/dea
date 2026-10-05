@@ -19,12 +19,13 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
-	"rterm/web"
+	"dea/internal/proto"
+	"dea/internal/sysstat"
+	"dea/web"
 )
 
 const (
-	cookieName = "rterm_session"
+	cookieName = "dea_session"
 	loginTTL   = 12 * time.Hour
 )
 
@@ -34,6 +35,10 @@ type server struct {
 	cfg       config
 	hub       *Hub
 	namesKick chan struct{} // nil unless names are fetched from ybservice
+
+	sampler  sysstat.Sampler
+	statsMu  sync.Mutex
+	lastSelf *proto.Stats // this server's host, refreshed every StatsInterval
 }
 
 func (s *server) routes() http.Handler {
@@ -130,15 +135,13 @@ func (s *server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
-	base := s.publicURL(r)
 	me := map[string]string{
 		"user":     s.currentUser(r),
 		"upstream": s.cfg.Upstream,
 		"store_id": s.cfg.StoreID,
 	}
 	if s.cfg.StoreToken != "" {
-		me["store_setup"] = fmt.Sprintf("RTERM_UPSTREAM=%s\nRTERM_UPSTREAM_TOKEN=%s\nRTERM_STORE_ID=<unique-store-name>",
-			"ws"+strings.TrimPrefix(base, "http"), s.cfg.StoreToken)
+		me["store_setup"] = fmt.Sprintf("DEA_UPSTREAM_TOKEN=%s", s.cfg.StoreToken)
 	}
 	writeJSON(w, me)
 }
@@ -147,7 +150,7 @@ func (s *server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleAgents(w http.ResponseWriter, r *http.Request) {
 	agents, stores := s.hub.List()
-	writeJSON(w, map[string]any{"agents": agents, "stores": stores})
+	writeJSON(w, map[string]any{"agents": agents, "stores": stores, "server": s.selfInfo()})
 }
 
 func (s *server) handleForget(w http.ResponseWriter, r *http.Request) {
@@ -512,8 +515,11 @@ func (s *server) handleAgentConnect(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		c.SetReadDeadline(time.Now().Add(proto.ReadTimeout))
-		if m.Type == proto.TypeExecResult {
+		switch m.Type {
+		case proto.TypeExecResult:
 			s.hub.DeliverExec("agent:"+hello.ID, m)
+		case proto.TypeStats:
+			s.hub.SetAgentStats(hello.ID, m.Stats)
 		}
 	}
 }
@@ -546,7 +552,7 @@ func (s *server) handleStoreConnect(w http.ResponseWriter, r *http.Request) {
 		c.SetReadDeadline(time.Now().Add(proto.ReadTimeout))
 		switch m.Type {
 		case proto.TypeAgents:
-			s.hub.UpdateStoreAgents(hello.ID, m.Agents)
+			s.hub.UpdateStoreAgents(hello.ID, m.Agents, m.Stats)
 			for _, a := range m.Agents {
 				if s.namesKick != nil && s.hub.NeedDeviceName(a.DeviceID) {
 					s.kickNames()
@@ -571,19 +577,6 @@ func (s *server) handleSessionDialBack(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- helpers ---------------------------------------------------------------
-
-// publicURL is how browsers and stores reach this server (RTERM_PUBLIC_URL, e.g.
-// behind a reverse proxy, else the request's own host).
-func (s *server) publicURL(r *http.Request) string {
-	if s.cfg.PublicURL != "" {
-		return s.cfg.PublicURL
-	}
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host
-}
 
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")

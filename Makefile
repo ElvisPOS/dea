@@ -1,22 +1,34 @@
-# Build and publish the rterm-server image (server + agent binaries) to the ElvisPOS registry,
-# as both :$(VERSION) and :latest. Servers pick up :latest with `ecli rterm install`.
+# Build the two dea binaries (static, linux/amd64) into dist/:
 #
-#   make push VERSION=v1.0.3
+#   dea-server  goes to central's ~/com-elvispos-engine/bin/dea-server
+#   dea-agent   goes to central's ~/com-elvispos-engine/share/RELEASE/elvispos/dea/dea-agent
+#
+# Stores get both from central (the server sync, or right away with `ecli dea install`),
+# POS get the agent from their store.
+#
+#   make dist VERSION=v1.9.0
+#   make deploy VERSION=v1.9.0 CENTRAL=elvispos@7.7.7.179 SSH_PORT=22   # copy to central and run ecli dea install there
 
-REGISTRY ?= registry.elvispos.com
-IMAGE    ?= com-elvispos-rterm-server
-VERSION  ?= $(shell git describe --tags --always 2>/dev/null || date +%Y%m%d%H%M%S)
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || date +%Y%m%d%H%M%S)
+CENTRAL  ?=
+SSH_PORT ?= 22
+LDFLAGS  := -s -w -X main.version=$(VERSION)
+ENGINE   := com-elvispos-engine
 
-.PHONY: build push vet
+.PHONY: vet dist deploy
 
 vet:
 	go vet ./...
 
-build: vet
-	docker build --platform linux/amd64 --build-arg VERSION=$(VERSION) -t $(REGISTRY)/$(IMAGE):$(VERSION) .
+dist: vet
+	mkdir -p dist
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/dea-server ./cmd/dea-server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$(LDFLAGS)" -o dist/dea-agent ./cmd/dea-agent
+	@echo "built dist/dea-server and dist/dea-agent $(VERSION)"
 
-push: build
-	docker tag $(REGISTRY)/$(IMAGE):$(VERSION) $(REGISTRY)/$(IMAGE):latest
-	docker push $(REGISTRY)/$(IMAGE):$(VERSION)
-	docker push $(REGISTRY)/$(IMAGE):latest
-	@echo "pushed $(REGISTRY)/$(IMAGE):$(VERSION) and :latest (browse: http://$(REGISTRY):5001)"
+deploy: dist
+	@test -n "$(CENTRAL)" || (echo "usage: make deploy CENTRAL=elvispos@<central> [SSH_PORT=22]"; exit 1)
+	rsync -avz --chmod=F755 -e "ssh -p $(SSH_PORT)" dist/dea-server $(CENTRAL):$(ENGINE)/bin/dea-server
+	ssh -p $(SSH_PORT) $(CENTRAL) "mkdir -p $(ENGINE)/share/RELEASE/elvispos/dea"
+	rsync -avz --chmod=F755 -e "ssh -p $(SSH_PORT)" dist/dea-agent $(CENTRAL):$(ENGINE)/share/RELEASE/elvispos/dea/dea-agent
+	ssh -p $(SSH_PORT) $(CENTRAL) "cd $(ENGINE) && ecli dea install"

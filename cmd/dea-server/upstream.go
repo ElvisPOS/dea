@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
 )
 
 // Store side of a store <-> central link. The store dials out to central, sends
@@ -112,15 +112,16 @@ func (s *server) pushSnapshots(c *wsConn, done <-chan struct{}) {
 	defer t.Stop()
 	for {
 		agents, _ := s.hub.List()
-		// LastSeen moves on every ping; leave it out of the change check.
+		// LastSeen moves on every ping and stats every minute; leave them out of
+		// the change check, so resource usage goes up with the periodic refresh only.
 		cmp := make([]proto.AgentInfo, len(agents))
 		for i, a := range agents {
-			a.LastSeen = time.Time{}
+			a.LastSeen, a.Stats = time.Time{}, nil
 			cmp[i] = a
 		}
 		b, _ := json.Marshal(cmp)
-		if !bytes.Equal(b, last) || time.Since(lastSent) > 30*time.Second {
-			if err := c.WriteJSON(proto.Msg{Type: proto.TypeAgents, Agents: agents}); err != nil {
+		if !bytes.Equal(b, last) || time.Since(lastSent) > proto.SnapshotInterval {
+			if err := c.WriteJSON(proto.Msg{Type: proto.TypeAgents, Agents: agents, Stats: s.selfStats()}); err != nil {
 				c.Close()
 				return
 			}

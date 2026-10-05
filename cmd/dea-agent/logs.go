@@ -17,7 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
 )
 
 // Log files are the ones under /usr/share/elvispos whose name contains ".log"

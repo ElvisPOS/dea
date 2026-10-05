@@ -1,4 +1,4 @@
-// rterm-agent runs on each POS. It keeps an outbound WebSocket to rterm-server
+// dea-agent runs on each POS. It keeps an outbound WebSocket to dea-server
 // (so the POS never needs to accept inbound connections) and starts shells or
 // one-shot commands when the server asks.
 package main
@@ -22,7 +22,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
+	"dea/internal/sysstat"
 )
 
 var version = "dev"
@@ -34,13 +35,14 @@ type agent struct {
 	shell  string
 	home   string
 	user   string
+	stats  sysstat.Sampler
 }
 
 func main() {
 	hostname, _ := os.Hostname()
-	server := flag.String("server", os.Getenv("RTERM_SERVER"), "server URL, e.g. ws://7.7.7.201:7681 (env RTERM_SERVER)")
-	token := flag.String("token", os.Getenv("RTERM_TOKEN"), "agent token (env RTERM_TOKEN)")
-	id := flag.String("id", envOr("RTERM_ID", hostname), "agent id shown in the UI (env RTERM_ID)")
+	server := flag.String("server", os.Getenv("DEA_SERVER"), "server URL, e.g. ws://7.7.7.201:7681 (env DEA_SERVER)")
+	token := flag.String("token", os.Getenv("DEA_TOKEN"), "agent token (env DEA_TOKEN)")
+	id := flag.String("id", envOr("DEA_ID", hostname), "agent id shown in the UI (env DEA_ID)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 	if *showVersion {
@@ -49,12 +51,12 @@ func main() {
 	}
 	log.SetFlags(0) // journald adds timestamps
 	if *server == "" || *token == "" {
-		log.Fatal("RTERM_SERVER and RTERM_TOKEN are required")
+		log.Fatal("DEA_SERVER and DEA_TOKEN are required")
 	}
 
 	a := &agent{server: strings.TrimRight(*server, "/"), token: *token, id: *id}
 	a.user, a.home, a.shell = currentAccount()
-	log.Printf("rterm-agent %s id=%s user=%s shell=%s server=%s", version, a.id, a.user, a.shell, a.server)
+	log.Printf("dea-agent %s id=%s user=%s shell=%s server=%s", version, a.id, a.user, a.shell, a.server)
 
 	backoff := time.Second
 	for {
@@ -142,6 +144,9 @@ func (a *agent) run() error {
 	}
 	log.Printf("connected to %s", a.server)
 	watchDeadline(c.Conn)
+	done := make(chan struct{})
+	defer close(done)
+	go a.reportStats(c, done)
 
 	for {
 		_, data, err := c.ReadMessage()
@@ -178,6 +183,22 @@ func (a *agent) run() error {
 				res.Type, res.Req = proto.TypeExecResult, m.Req
 				c.send(res)
 			}()
+		}
+	}
+}
+
+// reportStats sends the POS resource usage now and every StatsInterval.
+func (a *agent) reportStats(c *conn, done <-chan struct{}) {
+	t := time.NewTicker(proto.StatsInterval)
+	defer t.Stop()
+	for {
+		if err := c.send(proto.Msg{Type: proto.TypeStats, Stats: a.stats.Sample(sysstat.MountProbes())}); err != nil {
+			return
+		}
+		select {
+		case <-done:
+			return
+		case <-t.C:
 		}
 	}
 }

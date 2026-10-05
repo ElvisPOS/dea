@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
 )
 
 // The POS screen is served by x11vnc on port 5900. The agent connects to it

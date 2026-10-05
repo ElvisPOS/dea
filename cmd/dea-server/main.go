@@ -1,4 +1,4 @@
-// rterm-server is the central hub: POS agents dial in over WebSocket and
+// dea-server is the central hub: POS agents dial in over WebSocket and
 // operators open their terminals from a browser.
 package main
 
@@ -16,7 +16,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
+	"dea/internal/sysstat"
 )
 
 type config struct {
@@ -26,19 +27,20 @@ type config struct {
 	AdminUser     string
 	AdminPassword string
 	SessionSecret []byte
-	PublicURL     string
 	AllowNets     []*net.IPNet
 
 	// Central side: token store servers present on /api/store/*.
 	StoreToken string
 
-	// Store side: link this server to a central server.
-	Upstream      string
+	// Store side: link this server to a central server. A store server is one
+	// with STORE_REPLICATION_ID and REPLICATION_SERVER_ADDRESS in its ElvisPOS
+	// settings: dea links to the central it replicates from.
+	Upstream      string // ws://<REPLICATION_SERVER_ADDRESS>:7681
 	UpstreamToken string
-	StoreID       string
+	StoreID       string // STORE_REPLICATION_ID
 
-	// ybservice base URL used to read store and POS names (system.store, system.devices).
-	YBServiceURL string
+	// Disks whose usage this server reports for its host (DEA_DISKS).
+	Disks []sysstat.Probe
 }
 
 func env(k, def string) string {
@@ -50,44 +52,48 @@ func env(k, def string) string {
 
 func main() {
 	cfg := config{
-		Listen:        env("RTERM_LISTEN", ":7681"),
-		DataDir:       env("RTERM_DATA", "./data"),
-		AgentToken:    os.Getenv("RTERM_AGENT_TOKEN"),
-		AdminUser:     env("RTERM_ADMIN_USER", "admin"),
-		AdminPassword: os.Getenv("RTERM_ADMIN_PASSWORD"),
-		PublicURL:     strings.TrimRight(os.Getenv("RTERM_PUBLIC_URL"), "/"),
-		StoreToken:    os.Getenv("RTERM_STORE_TOKEN"),
-		Upstream:      strings.TrimRight(os.Getenv("RTERM_UPSTREAM"), "/"),
-		UpstreamToken: os.Getenv("RTERM_UPSTREAM_TOKEN"),
-		StoreID:       os.Getenv("RTERM_STORE_ID"),
-		YBServiceURL:  strings.TrimRight(os.Getenv("RTERM_YBSERVICE_URL"), "/"),
+		Listen:        env("DEA_LISTEN", ":"+deaPort),
+		DataDir:       env("DEA_DATA", "./data"),
+		AgentToken:    os.Getenv("DEA_AGENT_TOKEN"),
+		AdminUser:     env("DEA_ADMIN_USER", "admin"),
+		AdminPassword: os.Getenv("DEA_ADMIN_PASSWORD"),
+		StoreToken:    os.Getenv("DEA_STORE_TOKEN"),
+		UpstreamToken: os.Getenv("DEA_UPSTREAM_TOKEN"),
+		Disks:         sysstat.ParseProbes(os.Getenv("DEA_DISKS")),
 	}
 	if len(cfg.AgentToken) < 16 {
-		log.Fatal("RTERM_AGENT_TOKEN must be set (at least 16 characters)")
+		log.Fatal("DEA_AGENT_TOKEN must be set (at least 16 characters)")
 	}
 	if cfg.AdminPassword == "" {
-		log.Fatal("RTERM_ADMIN_PASSWORD must be set")
+		log.Fatal("DEA_ADMIN_PASSWORD must be set")
 	}
-	if s := os.Getenv("RTERM_SESSION_SECRET"); s != "" {
+	if s := os.Getenv("DEA_SESSION_SECRET"); s != "" {
 		cfg.SessionSecret = []byte(s)
 	} else {
 		cfg.SessionSecret = make([]byte, 32)
 		rand.Read(cfg.SessionSecret)
-		log.Print("RTERM_SESSION_SECRET not set: browser logins will not survive a restart")
+		log.Print("DEA_SESSION_SECRET not set: browser logins will not survive a restart")
 	}
 	if cfg.StoreToken != "" && len(cfg.StoreToken) < 16 {
-		log.Fatal("RTERM_STORE_TOKEN must be at least 16 characters")
+		log.Fatal("DEA_STORE_TOKEN must be at least 16 characters")
 	}
-	if cfg.Upstream != "" && (cfg.UpstreamToken == "" || !validID.MatchString(cfg.StoreID)) {
-		log.Fatal("RTERM_UPSTREAM needs RTERM_UPSTREAM_TOKEN and RTERM_STORE_ID (letters, digits, . _ -)")
+	storeID, central := strings.TrimSpace(os.Getenv("STORE_REPLICATION_ID")), os.Getenv("REPLICATION_SERVER_ADDRESS")
+	switch {
+	case storeID != "" && central != "":
+		cfg.StoreID, cfg.Upstream = storeID, upstreamURL(central)
+		if cfg.UpstreamToken == "" || !validID.MatchString(cfg.StoreID) || cfg.Upstream == "" {
+			log.Fatal("store server: needs DEA_UPSTREAM_TOKEN, a STORE_REPLICATION_ID of letters, digits, . _ - and a REPLICATION_SERVER_ADDRESS")
+		}
+	case storeID != "" || central != "":
+		log.Print("only one of STORE_REPLICATION_ID and REPLICATION_SERVER_ADDRESS is set: running as central, not linked to any server")
 	}
-	for _, c := range strings.Split(os.Getenv("RTERM_ALLOW_CIDRS"), ",") {
+	for _, c := range strings.Split(os.Getenv("DEA_ALLOW_CIDRS"), ",") {
 		if c = strings.TrimSpace(c); c == "" {
 			continue
 		}
 		_, n, err := net.ParseCIDR(c)
 		if err != nil {
-			log.Fatalf("RTERM_ALLOW_CIDRS: %v", err)
+			log.Fatalf("DEA_ALLOW_CIDRS: %v", err)
 		}
 		cfg.AllowNets = append(cfg.AllowNets, n)
 	}
@@ -99,21 +105,42 @@ func main() {
 	if cfg.Upstream != "" {
 		go s.runUpstream()
 	}
-	if cfg.YBServiceURL != "" {
-		s.namesKick = make(chan struct{}, 1)
-		go s.runNames()
-	}
+	s.namesKick = make(chan struct{}, 1)
+	go s.runNames()
+	go s.runSelfStats()
 	if len(cfg.AllowNets) > 0 {
-		log.Printf("accepting connections only from %s", os.Getenv("RTERM_ALLOW_CIDRS"))
+		log.Printf("accepting connections only from %s", os.Getenv("DEA_ALLOW_CIDRS"))
 	}
-	log.Printf("rterm-server %s listening on %s", version, cfg.Listen)
+	log.Printf("dea-server %s listening on %s", version, cfg.Listen)
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.allowlist(s.routes()), ReadHeaderTimeout: 10 * time.Second}
 	log.Fatal(srv.ListenAndServe())
 }
 
 var version = "dev"
 
-// allowlist rejects clients outside RTERM_ALLOW_CIDRS (if set).
+// deaPort is where every dea server listens, and so where a store finds central.
+const deaPort = "7681"
+
+// upstreamURL turns REPLICATION_SERVER_ADDRESS (a host or IP, possibly with a
+// scheme, port or path) into central's dea address.
+func upstreamURL(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if i := strings.Index(addr, "://"); i >= 0 {
+		addr = addr[i+3:]
+	}
+	addr, _, _ = strings.Cut(addr, "/")
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" {
+		return ""
+	}
+	return "ws://" + net.JoinHostPort(host, deaPort)
+}
+
+// allowlist rejects clients outside DEA_ALLOW_CIDRS (if set).
 func (s *server) allowlist(next http.Handler) http.Handler {
 	if len(s.cfg.AllowNets) == 0 {
 		return next
@@ -127,7 +154,7 @@ func (s *server) allowlist(next http.Handler) http.Handler {
 				return
 			}
 		}
-		log.Printf("rejected %s %s from %s (not in RTERM_ALLOW_CIDRS)", r.Method, r.URL.Path, r.RemoteAddr)
+		log.Printf("rejected %s %s from %s (not in DEA_ALLOW_CIDRS)", r.Method, r.URL.Path, r.RemoteAddr)
 		http.Error(w, "forbidden", http.StatusForbidden)
 	})
 }

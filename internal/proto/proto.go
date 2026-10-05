@@ -1,4 +1,4 @@
-// Package proto defines the JSON messages exchanged between rterm nodes.
+// Package proto defines the JSON messages exchanged between dea nodes.
 //
 // Topology: POS agents connect to a server (usually the store server); a store
 // server may in turn connect "upstream" to a central server. Every link is
@@ -18,7 +18,8 @@ const (
 	// Control channel, lower -> upper tier.
 	TypeHello      = "hello"
 	TypeExecResult = "exec_result"
-	TypeAgents     = "agents" // store -> central: snapshot of the store's agents
+	TypeAgents     = "agents" // store -> central: snapshot of the store's agents (+ the store's own Stats)
+	TypeStats      = "stats"  // agent -> server: resource usage of the POS, every StatsInterval
 
 	// Control channel, upper -> lower tier.
 	TypeOpen        = "open"
@@ -70,6 +71,38 @@ type Msg struct {
 
 	// log_download: absolute paths, as listed by log_list
 	Files []string `json:"files,omitempty"`
+
+	// stats (agent), agents (store): resource usage of the sending host
+	Stats *Stats `json:"stats,omitempty"`
+}
+
+// StatsInterval is how often agents and servers sample their resource usage.
+const StatsInterval = 60 * time.Second
+
+// SnapshotInterval is the longest a store waits before resending its agent
+// list (with the latest resource reports) to central.
+const SnapshotInterval = 30 * time.Second
+
+// Stats is a host's resource usage. Sizes are bytes.
+type Stats struct {
+	At        time.Time `json:"at"`
+	CPUs      int       `json:"cpus"`
+	CPU       float64   `json:"cpu"`  // % busy over the last interval, all cores together
+	Load      []float64 `json:"load"` // 1, 5 and 15 minute load averages
+	MemTotal  uint64    `json:"mem_total"`
+	MemUsed   uint64    `json:"mem_used"` // total - available
+	SwapTotal uint64    `json:"swap_total"`
+	SwapUsed  uint64    `json:"swap_used"`
+	Disks     []Disk    `json:"disks"`
+	Uptime    int64     `json:"uptime"` // seconds since the host booted
+}
+
+// Disk is one filesystem; Used/(Used+Avail) is the "Use%" df shows.
+type Disk struct {
+	Path  string `json:"path"`
+	Total uint64 `json:"total"`
+	Used  uint64 `json:"used"`
+	Avail uint64 `json:"avail"`
 }
 
 // LogFile is one entry of a log_list answer.
@@ -98,6 +131,7 @@ type AgentInfo struct {
 	ConnectedAt time.Time `json:"connected_at,omitempty"`
 	Online      bool      `json:"online"`
 	Sessions    int       `json:"sessions"`
+	Stats       *Stats    `json:"stats,omitempty"` // last report; agents older than v1.6.0 send none
 }
 
 // Key is the agent's unique address on the server that produced this info.

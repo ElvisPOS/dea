@@ -13,22 +13,23 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
 )
 
 var errOffline = errors.New("agent is offline")
 
 // StoreInfo is what we know (and persist) about a downstream store server.
 type StoreInfo struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name,omitempty"` // from system.store, when central knows it
-	Hostname    string    `json:"hostname"`
-	Version     string    `json:"version"`
-	RemoteAddr  string    `json:"remote_addr"`
-	FirstSeen   time.Time `json:"first_seen"`
-	LastSeen    time.Time `json:"last_seen"`
-	ConnectedAt time.Time `json:"connected_at,omitempty"`
-	Online      bool      `json:"online"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name,omitempty"` // from system.store, when central knows it
+	Hostname    string       `json:"hostname"`
+	Version     string       `json:"version"`
+	RemoteAddr  string       `json:"remote_addr"`
+	FirstSeen   time.Time    `json:"first_seen"`
+	LastSeen    time.Time    `json:"last_seen"`
+	ConnectedAt time.Time    `json:"connected_at,omitempty"`
+	Online      bool         `json:"online"`
+	Stats       *proto.Stats `json:"stats,omitempty"` // the store server's own resource usage
 }
 
 // agent is a POS reachable either directly (conn) or through a store (via).
@@ -202,6 +203,15 @@ func (h *Hub) TouchStore(id string) {
 	h.mu.Unlock()
 }
 
+// SetAgentStats records the latest resource report of a direct agent.
+func (h *Hub) SetAgentStats(id string, st *proto.Stats) {
+	h.mu.Lock()
+	if a, ok := h.agents[id]; ok && a.via == "" && st != nil {
+		a.info.Stats = st
+	}
+	h.mu.Unlock()
+}
+
 // ---- stores ----------------------------------------------------------------
 
 func (h *Hub) RegisterStore(hello proto.Msg, remote string, c *wsConn) {
@@ -278,6 +288,14 @@ func (h *Hub) NeedDeviceName(id string) bool {
 	return true
 }
 
+// StoreName is the system.store description of a store id, if known (a store
+// server reads its own name from its local database).
+func (h *Hub) StoreName(id string) string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.names[id]
+}
+
 // StoreHasName reports whether a name is known for the store.
 func (h *Hub) StoreHasName(id string) bool {
 	h.mu.Lock()
@@ -287,10 +305,13 @@ func (h *Hub) StoreHasName(id string) bool {
 }
 
 // UpdateStoreAgents replaces everything we know about the agents behind a store
-// with the store's latest snapshot.
-func (h *Hub) UpdateStoreAgents(storeID string, list []proto.AgentInfo) {
+// with the store's latest snapshot, and records the store server's own usage.
+func (h *Hub) UpdateStoreAgents(storeID string, list []proto.AgentInfo, st *proto.Stats) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if s, ok := h.stores[storeID]; ok && st != nil {
+		s.info.Stats = st
+	}
 	seen := map[string]bool{}
 	for _, in := range list {
 		if in.Store == "" {

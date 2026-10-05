@@ -14,7 +14,7 @@ import (
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 
-	"rterm/internal/proto"
+	"dea/internal/proto"
 )
 
 // session runs an interactive login shell on a PTY and streams it over a

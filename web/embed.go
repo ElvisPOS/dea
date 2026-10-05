@@ -1,4 +1,4 @@
-// Package web holds the browser UI, embedded into rterm-server.
+// Package web holds the browser UI, embedded into dea-server.
 package web
 
 import "embed"

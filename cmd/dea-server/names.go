@@ -14,10 +14,12 @@ import (
 
 // Store and POS names come from system.store and system.devices, read through
 // ybservice's free-query endpoint (command 1003 returns the rows as a JSON
-// array). It is used when RTERM_YBSERVICE_URL is set; the last names fetched
-// are kept, so the UI keeps them while ybservice is unreachable.
+// array). ybservice runs on every ElvisPOS server, on the network-backend the
+// dea container joins. The last names fetched are kept, so the UI keeps them
+// while ybservice is unreachable.
 
 const (
+	ybserviceURL     = "http://ybservice:7392"
 	storeNamesQuery  = `SELECT n0_store_id AS id, sz_description AS name FROM system.store WHERE dt_deleted IS NULL`
 	deviceNamesQuery = `SELECT n0_device_id AS id, sz_description AS name FROM system.devices`
 	namesRefresh     = 5 * time.Minute
@@ -26,7 +28,7 @@ const (
 )
 
 func (s *server) runNames() {
-	log.Printf("names: reading system.store and system.devices through %s", s.cfg.YBServiceURL)
+	log.Printf("names: reading system.store and system.devices through %s", ybserviceURL)
 	for {
 		if names, err := s.freeQueryNames(storeNamesQuery); err != nil {
 			log.Printf("names: stores: %v", err)
@@ -62,7 +64,7 @@ func (s *server) freeQueryNames(query string) (map[string]string, error) {
 	body, _ := json.Marshal(map[string]any{"request": map[string]any{"command": freeQueryJSON, "query": query}})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.YBServiceURL+"/api/db-operations/remote-lookup", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ybserviceURL+"/api/db-operations/remote-lookup", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

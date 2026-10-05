@@ -1,4 +1,4 @@
-module rterm
+module dea
 
 go 1.22
 
