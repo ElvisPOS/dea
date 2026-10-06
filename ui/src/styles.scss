@@ -1,0 +1,12 @@
+/* DEA · Diagnostic Elvis Agent: global styles. Colours, type, spacing and sizes
+   come from the "ElvisPOS Remote Terminal" design system (tokens in _tokens.scss).
+   One partial per area of the app; class names are shared with the templates. */
+@use "styles/tokens";
+@use "styles/base";
+@use "styles/components";
+@use "styles/shell";
+@use "styles/login";
+@use "styles/fleet";
+@use "styles/device";
+@use "styles/terminal";
+@use "styles/logs";

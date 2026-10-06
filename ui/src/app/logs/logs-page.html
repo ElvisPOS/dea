@@ -1,0 +1,41 @@
+<div class="logs-head">
+  <div class="logs-title">
+    <h2>{{ label() }}</h2>
+    <span class="muted">{{ fleet.keyLabel(agentKey()) }}</span>
+    <span class="muted logs-status">{{ note() || status() }}</span>
+  </div>
+  <span class="spacer"></span>
+  <button class="rt-btn" (click)="load()">{{ 'logs.refresh' | t }}</button>
+  <button class="rt-btn" [disabled]="!!busy() || !selected().size" (click)="downloadSelected()">{{ 'logs.downloadSelected' | t }}</button>
+  <button class="rt-btn is-primary" [disabled]="!!busy() || !files()?.length" (click)="download(null)">{{ 'logs.downloadAll' | t }}</button>
+</div>
+
+@if (files() === null) {
+  <p class="muted">{{ 'logs.reading' | t }}</p>
+} @else if (error()) {
+  <p class="error">{{ error() }}</p>
+} @else if (!files()!.length) {
+  <p class="muted">{{ 'logs.none' | t }}</p>
+} @else {
+  <table class="logs-table">
+    <tr>
+      <th><input type="checkbox" [checked]="allChecked()" [indeterminate]="someChecked()" (change)="toggleAll($any($event.target).checked)" /></th>
+      <th>{{ 'logs.file' | t }}</th>
+      <th class="num">{{ 'logs.size' | t }}</th>
+      <th>{{ 'logs.modified' | t }}</th>
+      <th></th>
+    </tr>
+    @for (g of groups(); track g.dir) {
+      <tr class="logs-group"><td colspan="5">{{ g.dir }}</td></tr>
+      @for (f of g.files; track f.path) {
+        <tr>
+          <td><input type="checkbox" [checked]="selected().has(f.path)" (change)="toggle(f.path, $any($event.target).checked)" /></td>
+          <td class="mono" [title]="f.path">{{ baseName(f) }}</td>
+          <td class="num mono">{{ humanSize(f.size) }}</td>
+          <td [title]="f.mtime">{{ 'logs.ago' | t: { ago: i18n.ago(f.mtime) } }}</td>
+          <td class="act"><button class="row-btn" (click)="download([f.path])">{{ 'logs.download' | t }}</button></td>
+        </tr>
+      }
+    }
+  </table>
+}

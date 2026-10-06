@@ -1,0 +1,108 @@
+<div class="home-top">
+  <div>
+    <h1>{{ 'home.title' | t }}</h1>
+    <p class="lede">{{ 'home.lede' | t }}</p>
+  </div>
+  <div class="rt-kpis">
+    @if (c().stores) {
+      <button class="rt-kpi" [class.is-ok]="c().storesUp === c().stores" (click)="setFilter('all')">
+        <b>{{ c().storesUp }}/{{ c().stores }}</b><span>{{ 'kpi.storesUp' | t }}</span>
+      </button>
+    }
+    <button class="rt-kpi" [class.is-ok]="c().pos && c().posOnline === c().pos" (click)="setFilter('online')">
+      <b>{{ c().posOnline }}/{{ c().pos }}</b><span>{{ 'kpi.posOnline' | t }}</span>
+    </button>
+    <button class="rt-kpi" (click)="setFilter('offline')"><b>{{ c().offline }}</b><span>{{ 'kpi.offline' | t }}</span></button>
+    <button class="rt-kpi" [class.is-warn]="c().warn" (click)="setFilter('warn')"><b>{{ c().warn }}</b><span>{{ 'kpi.warn' | t }}</span></button>
+    <button class="rt-kpi" [class.is-crit]="c().crit" (click)="setFilter('warn')"><b>{{ c().crit }}</b><span>{{ 'kpi.crit' | t }}</span></button>
+  </div>
+</div>
+
+@if (results(); as r) {
+  <dea-exec-results [cmd]="r.cmd" [results]="r.results" [error]="r.error" [count]="fleet.selected().size" (closed)="results.set(null)" />
+}
+
+<div class="tools">
+  <input class="rt-input" type="search" [placeholder]="'home.search' | t" autocomplete="off" [ngModel]="fleet.query()" (ngModelChange)="fleet.query.set($event.trim())" />
+  <div class="rt-seg" role="group">
+    @for (f of ['all', 'online', 'offline', 'warn']; track f) {
+      <button [attr.aria-pressed]="fleet.filter() === f" (click)="setFilter($any(f))">{{ 'filter.' + f | t }}</button>
+    }
+  </div>
+  <label class="sort">
+    <span>{{ 'sort.label' | t }}</span>
+    <select class="rt-input" [ngModel]="fleet.sort()" (ngModelChange)="fleet.sort.set($event)">
+      <option value="az">{{ 'sort.az' | t }}</option>
+      <option value="store">{{ 'sort.store' | t }}</option>
+    </select>
+  </label>
+  <span class="spacer"></span>
+  @if (c().stores) {
+    <button class="rt-btn is-ghost" (click)="expandAll(true)">{{ 'groups.expandAll' | t }}</button>
+    <button class="rt-btn is-ghost" (click)="expandAll(false)">{{ 'groups.collapseAll' | t }}</button>
+  }
+  <button class="rt-btn is-primary" (click)="openAdd()"><dea-icon name="plus" />{{ 'add.button' | t }}</button>
+</div>
+
+<div class="rt-list-wrap">
+  <div class="rt-list" role="table" #list (keydown)="onKey($event)">
+    <dea-list-head />
+    @for (r of rows(); track r.node.id) {
+      <div deaFleetRow [node]="r.node" [guides]="r.guides"></div>
+    } @empty {
+      <div class="empty">{{ 'home.empty' | t }}</div>
+    }
+  </div>
+</div>
+<p class="hint">{{ 'home.hint' | t }}</p>
+
+<!-- command bar: shown while POS are ticked -->
+@if (fleet.selected().size) {
+  <div class="bulk">
+    <b>{{ 'bulk.n' | t: { n: fleet.selected().size } }}{{ selectedOffline() ? ('bulk.off' | t: { n: selectedOffline() }) : '' }}</b>
+    <input class="rt-input" [placeholder]="'bulk.placeholder' | t" spellcheck="false" [ngModel]="cmd()" (ngModelChange)="cmd.set($event)" (keydown.enter)="run()" />
+    <select class="rt-input" [ngModel]="timeout()" (ngModelChange)="timeout.set(+$event)">
+      <option [ngValue]="10">10 s</option>
+      <option [ngValue]="30">30 s</option>
+      <option [ngValue]="120">2 min</option>
+      <option [ngValue]="600">10 min</option>
+    </select>
+    <button class="rt-btn is-primary" [disabled]="running() || !cmd().trim()" (click)="run()">{{ 'bulk.run' | t }}</button>
+    <button class="rt-btn is-ghost" (click)="clearSelection()">{{ 'bulk.clear' | t }}</button>
+  </div>
+}
+
+<!-- "Add store or POS" -->
+<dialog class="dlg" #addDialog (click)="closeAdd($event)">
+  <div class="dlg-head">
+    <h2 class="sec-title" style="margin: 0">{{ 'add.button' | t }}</h2>
+    <button class="rt-btn is-ghost" data-close-dialog>{{ 'dialog.close' | t }}</button>
+  </div>
+  <div class="dlg-body">
+    @if (session.me()?.upstream) {
+      <section>
+        <h3 class="sec-title">{{ 'upstream.title' | t }}</h3>
+        <p>{{ 'upstream.text' | t: { url: session.me()!.upstream, id: session.me()!.store_id } }}</p>
+      </section>
+    }
+    @if (session.me()?.store_setup; as setup) {
+      <section>
+        <h3 class="sec-title">{{ 'addStore.title' | t }}</h3>
+        <p [innerHTML]="'addStore.desc_html' | t"></p>
+        <div class="codebox">
+          <code class="pre">{{ setup }}</code>
+          <button #b1 class="rt-btn" (click)="copy(setup, b1)">{{ 'copy' | t }}</button>
+        </div>
+      </section>
+    }
+    <section>
+      <h3 class="sec-title">{{ (session.me()?.store_setup ? 'addPos.titleDirect' : 'addPos.title') | t }}</h3>
+      <p [innerHTML]="'addPos.desc_html' | t"></p>
+      <div class="codebox">
+        <code>ecli dea install</code>
+        <button #b2 class="rt-btn" (click)="copy('ecli dea install', b2)">{{ 'copy' | t }}</button>
+      </div>
+      <p [innerHTML]="'addPos.options_html' | t"></p>
+    </section>
+  </div>
+</dialog>

@@ -6,6 +6,9 @@
 # Stores get both from central (the server sync, or right away with `ecli dea install`),
 # POS get the agent from their store.
 #
+# The web UI (Angular, in ui/) is built first and embedded into dea-server;
+# see README "Working on the UI".
+#
 #   make dist VERSION=v1.9.0
 #   make deploy VERSION=v1.9.0 CENTRAL=elvispos@7.7.7.179 SSH_PORT=22   # copy to central and run ecli dea install there
 
@@ -15,9 +18,16 @@ SSH_PORT ?= 22
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 ENGINE   := com-elvispos-engine
 
-.PHONY: vet dist deploy
+.PHONY: ui vet dist deploy
 
-vet:
+UI_SRC := $(shell find ui/src ui/public -type f) ui/package-lock.json ui/angular.json
+
+ui: web/dist/index.html
+
+web/dist/index.html: $(UI_SRC)
+	cd ui && npm ci --no-audit --no-fund && npm run build
+
+vet: ui
 	go vet ./...
 
 dist: vet

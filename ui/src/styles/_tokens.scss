@@ -1,0 +1,47 @@
+/* DEA · Diagnostic Elvis Agent. Colours, type, spacing and sizes come from the
+   "ElvisPOS Remote Terminal" design system (tokens.json, components/bundle.css). */
+
+/* ---- tokens: dark is the default, [data-theme=light] switches ---- */
+:root {
+  --bg-page: #0f1216; --bg-surface: #161a20; --bg-sunken: #1c2129; --bg-hover: #1f252e; --bg-selected: #1b2a40;
+  --border: #2a313b; --border-strong: #3a4350;
+  --ink: #e6e9ee; --ink-muted: #9aa4b2; --ink-subtle: #808a99;
+  --accent: #5b9bff; --accent-ink: #0b1220; --accent-soft: #1a2c4a; --accent-soft-ink: #a9c8ff;
+  --ok: #3fbf6f; --ok-ink: #7fdca2; --ok-soft: #13301f;
+  --warn: #e0a43a; --warn-ink: #f0c36d; --warn-soft: #3a2c10;
+  --crit: #f06055; --crit-ink: #ff958c; --crit-soft: #3d1916;
+  --off: #6b7480; --meter-track: #262c35;
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, .5);
+  --overlay: rgba(15, 18, 22, .88);
+  --term-bg: #0f1216; /* same as TERM_THEMES in app.js */
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg-page: #f4f6f8; --bg-surface: #ffffff; --bg-sunken: #f7f8fa; --bg-hover: #f1f4f8; --bg-selected: #e9f1fd;
+  --border: #e1e5ea; --border-strong: #c9d0d8;
+  --ink: #1b2028; --ink-muted: #556070; --ink-subtle: #6b7583;
+  --accent: #1f63c7; --accent-ink: #ffffff; --accent-soft: #e7f0fc; --accent-soft-ink: #1a56ad;
+  --ok: #1f9d4c; --ok-ink: #17733a; --ok-soft: #e5f5ea;
+  --warn: #d69e2e; --warn-ink: #8a5a00; --warn-soft: #fbf1dc;
+  --crit: #d92d20; --crit-ink: #b42318; --crit-soft: #fde8e6;
+  --off: #8a939e; --meter-track: #e8ebef;
+  --shadow-pop: 0 8px 24px rgba(16, 24, 40, .12);
+  --overlay: rgba(244, 246, 248, .92);
+  --term-bg: #ffffff;
+  color-scheme: light;
+}
+:root {
+  --font-sans: "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Noto Sans Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-6: 24px;
+  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-pill: 999px;
+  --row-h: 40px; --tree-indent: 20px; --meter-w: 56px;
+
+  /* names used by the terminal, logs and screen views */
+  --bg: var(--bg-page); --panel: var(--bg-surface); --panel-2: var(--bg-sunken); --line: var(--border);
+  --text: var(--ink); --muted: var(--ink-muted); --bad: var(--crit);
+  --accent-line: var(--border-strong); --on-accent: var(--accent-ink); --on-warn: #1a1300;
+  --focus-head: var(--bg-selected); --sync-head: var(--warn-soft);
+  --mono: var(--font-mono); --sans: var(--font-sans);
+}
+

@@ -1,0 +1,73 @@
+@for (v of tab().slots(); track $index; let i = $index) {
+  <div class="term-cell" [class.focused]="tab().layout() > 1 && i === tab().focused()" [style]="boxes()[i]" (mousedown)="tab().focused.set(i)">
+    <div class="term-head">
+      @if (v) {
+        <span class="dot" [class.wait]="v.state() === 'wait'" [class.on]="v.state() === 'live'" [class.dead]="v.state() === 'dead'"></span>
+        <div class="kind-switch">
+          <button [class.on]="v.kind === 'term'" [title]="'pane.toTerm' | t" (click)="$event.stopPropagation(); tab().showKind(i, 'term')">{{ 'pane.openTerm' | t }}</button>
+          <button [class.on]="v.kind === 'screen'" [title]="'pane.toScreen' | t" (click)="$event.stopPropagation(); tab().showKind(i, 'screen')">{{ 'pane.openScreen' | t }}</button>
+        </div>
+        <span class="term-head-name" [title]="fleet.keyLabel(v.agentKey)">{{ fleet.keyLabel(v.agentKey) }}</span>
+        <span class="spacer"></span>
+        @if (isScreen(v)) {
+          <button class="term-head-btn" [class.on]="!v.viewOnly()" [title]="(v.viewOnly() ? 'screen.viewOnlyTitle' : 'screen.controlTitle') | t" (click)="$event.stopPropagation(); v.setViewOnly(!v.viewOnly())">
+            {{ (v.viewOnly() ? 'screen.control' : 'screen.viewOnly') | t }}
+          </button>
+          <button class="term-head-btn" [disabled]="v.viewOnly() || v.state() !== 'live'" (click)="$event.stopPropagation(); v.ctrlAltDel()">{{ 'screen.cad' | t }}</button>
+        } @else {
+          <span class="term-head-sync">{{ 'pane.syncBadge' | t }}</span>
+        }
+      } @else {
+        <span class="muted">{{ 'pane.empty' | t }}</span>
+        <span class="spacer"></span>
+      }
+      <button class="term-head-close" [title]="(tab().layout() > 1 ? 'pane.remove' : 'pane.close') | t" (click)="$event.stopPropagation(); tab().closeSlot(i)">×</button>
+    </div>
+
+    <div class="term-body">
+      @if (v) {
+        <div class="view-host" [deaViewHost]="v"></div>
+        @if (isScreen(v) && v.message(); as m) {
+          <div class="screen-overlay">
+            <div class="screen-msg">
+              <p>{{ m.text }}</p>
+              @if (m.action === 'retry') {
+                <button class="rt-btn" (click)="v.connect()">{{ 'screen.retry' | t }}</button>
+              } @else if (m.action === 'password') {
+                <form class="screen-pass" (submit)="submitPassword(v, $event)">
+                  <input class="rt-input" type="password" autocomplete="off" name="vncpw" [placeholder]="'screen.password' | t" [ngModel]="password()" (ngModelChange)="password.set($event)" />
+                  <button class="rt-btn is-primary" type="submit">{{ 'screen.connect' | t }}</button>
+                </form>
+              }
+            </div>
+          </div>
+        }
+      } @else {
+        <div class="term-empty">
+          <p class="muted">{{ emptyHint() }}</p>
+          <select #pick class="rt-input" (change)="(true)">
+            <option value="">{{ 'pane.choose' | t }}</option>
+            @for (g of choices(); track g.group) {
+              <optgroup [label]="g.group">
+                @for (a of g.items; track a.key) {
+                  <option [value]="a.key">{{ a.name }}</option>
+                }
+              </optgroup>
+            }
+          </select>
+          <div class="term-empty-actions">
+            <button class="rt-btn" [disabled]="!pick.value" (click)="open(i, pick.value, 'term')">{{ 'pane.openTerm' | t }}</button>
+            <button class="rt-btn" [disabled]="!pick.value" (click)="open(i, pick.value, 'screen')">{{ 'pane.openScreen' | t }}</button>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+@if (tab().layout() > 1) {
+  <div class="split-bar is-v" [style.left]="'calc(' + tab().cx() * 100 + '% - 4px)'" [title]="'pane.resize' | t" (pointerdown)="drag('v', $event)" (dblclick)="resetSplit('v')"></div>
+}
+@if (tab().layout() > 2) {
+  <div class="split-bar is-h" [style.top]="'calc(' + tab().cy() * 100 + '% - 4px)'" [style.left]="tab().layout() === 3 ? tab().cx() * 100 + '%' : '0'" style="right: 0" [title]="'pane.resize' | t" (pointerdown)="drag('h', $event)" (dblclick)="resetSplit('h')"></div>
+}

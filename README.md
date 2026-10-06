@@ -73,3 +73,24 @@ root's crontab; no system service. Shells run as `elvispos`. Remove with `ecli d
 - Traffic is plain `ws://`/`http://` and relies on the VPN for encryption.
 - Every server logs logins, terminal sessions (open/close, who, how long) and fleet commands:
   `ecli logs dea` (or `docker service logs dea_agent`).
+
+## Working on the UI
+
+The web UI is an Angular app in `ui/` (standalone components and signals, one folder per screen:
+`fleet/`, `device/`, `terminal/`, `logs/`, `login/`; data access in `core/`, styles in
+`src/styles/`). `make dist` builds it into `web/dist`, which is embedded into `dea-server`.
+Needs Node 20+ (`cd ui && npm ci` once).
+
+| Command (in `ui/`) | What it does |
+|---|---|
+| `npm run mock` | UI on http://localhost:4300 with a fake fleet, no server needed. The picker at the bottom right switches scenario (`fleet`, `central-only`, `store`, `empty`, `big`); the mock POS shell answers a few commands. `?login=1` starts on the login page. |
+| `npm start` | UI on http://localhost:4200 against a real server; `/api` and the WebSockets go to `DEA_URL` (default `http://127.0.0.1:7681`). For central: `ssh -L 7681:localhost:7681 elvispos@7.7.7.179`, then `npm start`. |
+| `npm run check` | Opens every screen in the mock (both themes, Italian, menus, dialogs, splits) and compares it with the reference screenshots in `e2e/__screenshots__`; also checks behaviour (search, keyboard, store rule, login). Uses the installed Google Chrome. |
+| `npm run check:report` | Shows the last check, with the expected/actual/diff images of every changed screen. |
+| `npm run check:update` | Accepts the current look as the new reference, after a deliberate change. Commit the PNGs with the change. |
+| `npm test` | Unit tests of the fleet logic (tree, sorting, health levels, search), in `*.spec.ts`. |
+| `npm run build` | Production build into `web/dist` (what `make ui` runs). |
+
+Edit and save: both servers reload the page. A typical fix: reproduce it in `npm run mock` (add a
+case to `src/mock/scenarios.ts` if the data is unusual), fix it, run `npm run check`, look at the
+report, then `npm run check:update`.

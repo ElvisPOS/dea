@@ -1,0 +1,130 @@
+@if (node(); as n) {
+  <div class="crumbs">
+    <a (click)="tabs.activate('fleet')">{{ 'tab.fleet' | t }}</a>
+    @for (c of chain(); track c.id; let last = $last) {
+      <span>›</span>
+      @if (last) {
+        <span>{{ c.name }}</span>
+      } @else {
+        <a (click)="tabs.openDevice(c.id)">{{ c.name }}</a>
+      }
+    }
+  </div>
+
+  <div class="dhead">
+    <h1><dea-dot [node]="n" /><span class="rt-name">{{ n.name }}</span><dea-role [kind]="n.kind" /></h1>
+    @if (n.kind === 'pos') {
+      <div class="acts">
+        <button class="rt-btn is-primary" [disabled]="!n.online" (click)="tabs.openTerminal(n.key!, n.name)">{{ 'menu.terminal' | t }}</button>
+        <button class="rt-btn" [disabled]="!n.online" (click)="tabs.openTerminal(n.key!, n.name, 'screen')">{{ 'menu.screen' | t }}</button>
+        <button class="rt-btn" [disabled]="!n.online" (click)="tabs.openLogs(n.key!, n.name)">{{ 'menu.logs' | t }}</button>
+        <button class="rt-btn" [disabled]="!n.online" (click)="focusCmd()">{{ 'dev.run' | t }}</button>
+      </div>
+    }
+  </div>
+
+  @if (!n.online) {
+    <div class="offnote">{{ (st() ? 'dev.offlineStats' : 'dev.offline') | t: { ago: i18n.ago(n.seen) } }}</div>
+  }
+
+  @if (st(); as s) {
+    <div class="cards">
+      <div class="card">
+        <h3>{{ 'card.cpu' | t }}</h3>
+        <div class="big" [class]="level(s.cpu) ? 'is-' + level(s.cpu) : ''">{{ s.cpu.toFixed(0) }}%</div>
+        <div class="rt-sub">{{ 'res.cores' | t: { n: s.cpus } }}</div>
+        <dea-meter [p]="s.cpu" />
+      </div>
+      <div class="card">
+        <h3>{{ 'card.mem' | t }}</h3>
+        <div class="big" [class]="level(memP()) ? 'is-' + level(memP()) : ''">{{ memP().toFixed(0) }}%</div>
+        <div class="rt-sub">{{ memText() }}</div>
+        <dea-meter [p]="memP()" />
+      </div>
+      <div class="card">
+        <h3>{{ 'card.load' | t }}</h3>
+        <div class="big">{{ (s.load[0] || 0).toFixed(2) }}</div>
+        <div class="rt-sub">{{ 'card.loadSub' | t: { a: (s.load[1] || 0).toFixed(2), b: (s.load[2] || 0).toFixed(2) } }}</div>
+      </div>
+      <div class="card">
+        <h3>{{ 'card.uptime' | t }}</h3>
+        <div class="big">{{ i18n.duration(s.uptime) }}</div>
+        <div class="rt-sub">{{ 'card.reported' | t: { ago: i18n.ago(s.at) } }}</div>
+      </div>
+    </div>
+  } @else if (n.online) {
+    <div class="offnote">{{ n.root ? ('res.waiting' | t) : ('row.old' | t: { version: n.version || '?' }) }}</div>
+  }
+
+  @if (n.kind !== 'pos' && kids().length) {
+    <div>
+      <h3 class="sec-title">{{ (n.kind === 'store' ? 'dev.posList' : 'dev.posDirect') | t }}</h3>
+      <div class="rt-list-wrap">
+        <div class="rt-list">
+          <dea-list-head />
+          @for (p of kids(); track p.id; let lastKid = $last) {
+            <div deaFleetRow [node]="p" [guides]="[lastKid ? 'is-elbow' : 'is-tee']"></div>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <div class="two">
+    <div class="card">
+      <h3>{{ (n.kind === 'store' ? 'dev.storeDisks' : 'dev.disks') | t }}</h3>
+      @if (st()?.disks?.length) {
+        <table>
+          <tr>
+            <th>{{ 'dev.mount' | t }}</th>
+            <th>{{ 'dev.used' | t }}</th>
+            <th>{{ 'dev.free' | t }}</th>
+            <th>{{ 'dev.size' | t }}</th>
+          </tr>
+          @for (d of st()!.disks; track d.path) {
+            <tr>
+              <td class="rt-mono">{{ d.path }}</td>
+              <td><dea-meter [p]="diskPct(d)" /></td>
+              <td class="rt-mono">{{ humanBytes(d.avail) }}</td>
+              <td class="rt-mono">{{ humanBytes(d.total) }}</td>
+            </tr>
+          }
+        </table>
+      } @else {
+        <p class="rt-sub">{{ 'dev.noReport' | t }}</p>
+      }
+    </div>
+    <div class="card">
+      <h3>{{ 'dev.details' | t }}</h3>
+      <table>
+        @for (r of details(); track r[0]) {
+          <tr>
+            <td class="k">{{ r[0] | t }}</td>
+            <td class="rt-mono">{{ r[1] }}</td>
+          </tr>
+        }
+      </table>
+    </div>
+  </div>
+
+  @if (n.kind === 'pos') {
+    <div class="card">
+      <h3>{{ 'dev.lastCmd' | t }}</h3>
+      <div class="runbox">
+        <input #cmdInput class="rt-input" placeholder="uptime; df -h /" spellcheck="false" [disabled]="!n.online" [ngModel]="cmd()" (ngModelChange)="cmd.set($event)" (keydown.enter)="run()" />
+        <select class="rt-input" [ngModel]="timeout()" (ngModelChange)="timeout.set(+$event)">
+          <option [ngValue]="10">10 s</option>
+          <option [ngValue]="30">30 s</option>
+          <option [ngValue]="120">2 min</option>
+          <option [ngValue]="600">10 min</option>
+        </select>
+        <button class="rt-btn is-primary" [disabled]="!n.online || running()" (click)="run()">{{ 'bulk.run' | t }}</button>
+      </div>
+      <pre class="term-out">@if (running()) {<span class="muted">{{ 'exec.running' | t: { n: 1 } }}</span>} @else if (last(); as l) {<span class="p">{{ n.agent?.user || 'elvispos' }}&#64;{{ n.host }}:~$ </span>{{ l.cmd }}
+{{ lastText() }}<span [class]="l.result.ok && l.result.code === 0 ? 'muted' : 'bad'">
+[{{ l.result.ok ? ('exec.exit' | t: { code: l.result.code }) : ('exec.failed' | t) }}]</span>} @else {<span class="muted">{{ 'dev.noCmd' | t }}</span>}</pre>
+    </div>
+  }
+} @else {
+  <p class="offnote">{{ 'dev.gone' | t }}</p>
+}

@@ -1,0 +1,108 @@
+@switch (session.state()) {
+  @case ('login') {
+    <dea-login />
+  }
+  @case ('app') {
+    <div class="app">
+      <header class="bar">
+        <div class="brand">
+          <img src="dea-mark.png" alt="" class="brand-logo logo-light" />
+          <img src="dea-mark-dark.png" alt="" class="brand-logo logo-dark" />
+          <b>DEA</b><small>Diagnostic Elvis Agent</small>
+        </div>
+
+        <nav class="tabs" role="tablist">
+          @for (tab of tabs.list(); track tab.key) {
+            <button class="tab" [class.on]="tabs.active() === tab.key" [class.sync]="tab.kind === 'term' && tab.term.sync()" (click)="tabs.activate(tab.key)" (auxclick)="$event.button === 1 && tabs.close(tab.key)">
+              @switch (tab.kind) {
+                @case ('fleet') {
+                  @if (fleetDot()) {
+                    <span class="rt-dot" [class.is-stale]="fleetDot() === 'warn'" [class.is-crit]="fleetDot() === 'crit'"></span>
+                  }
+                  <span class="tab-label">{{ 'tab.fleet' | t }}</span>
+                }
+                @case ('device') {
+                  @if (deviceNode(tab); as n) {
+                    <span class="rt-dot" [class.is-off]="!n.online"></span>
+                  }
+                  <span class="tab-kind">{{ 'dev.kind' | t }}</span>
+                  <span class="tab-label">{{ deviceNode(tab)?.name ?? '' }}</span>
+                }
+                @case ('term') {
+                  @if (termInfo(tab); as ti) {
+                    <span class="dot" [class.wait]="ti.state === 'wait'" [class.on]="ti.state === 'live'" [class.dead]="ti.state === 'dead'"></span>
+                    <span class="tab-kind">{{ ti.kind }}</span>
+                    <span class="tab-label" [attr.data-all]="'tab.all' | t" [title]="ti.title">{{ ti.label }}</span>
+                  }
+                }
+                @case ('logs') {
+                  <span class="tab-kind">{{ 'logs.kind' | t }}</span>
+                  <span class="tab-label" [title]="'logs.tabTitle' | t: { name: fleet.keyLabel(tab.agentKey) }">{{ tab.label }}</span>
+                }
+              }
+              @if (tab.kind !== 'fleet') {
+                <span class="tab-close" (click)="closeTab($event, tab.key)">×</span>
+              }
+            </button>
+          }
+        </nav>
+
+        @if (tabs.activeTerm(); as term) {
+          <div class="layout-btns">
+            <button class="rt-btn sync-btn" [class.on]="term.sync()" [disabled]="term.shells().length < 2" [title]="(term.shells().length < 2 ? 'sync.disabled' : term.sync() ? 'sync.on' : 'sync.off') | t" (click)="term.setSync(!term.sync())">{{ 'sync.button' | t }}</button>
+            @for (n of [1, 2, 4]; track n) {
+              <button [class.on]="term.layout() === n" [title]="'layout.' + n | t" (click)="term.setLayout(n)">
+                @switch (n) {
+                  @case (1) {
+                    <svg viewBox="0 0 16 12"><rect x="1" y="1" width="14" height="10" rx="1.5" /></svg>
+                  }
+                  @case (2) {
+                    <svg viewBox="0 0 16 12"><rect x="1" y="1" width="6.3" height="10" rx="1.5" /><rect x="8.7" y="1" width="6.3" height="10" rx="1.5" /></svg>
+                  }
+                  @case (4) {
+                    <svg viewBox="0 0 16 12"><rect x="1" y="1" width="6.3" height="4.3" rx="1.2" /><rect x="8.7" y="1" width="6.3" height="4.3" rx="1.2" /><rect x="1" y="6.7" width="6.3" height="4.3" rx="1.2" /><rect x="8.7" y="6.7" width="6.3" height="4.3" rx="1.2" /></svg>
+                  }
+                }
+              </button>
+            }
+          </div>
+        }
+
+        <div class="bar-r">
+          <button type="button" class="rt-btn is-ghost theme-btn" [title]="'theme.toggle' | t" (click)="theme.toggle()">
+            <dea-icon [name]="theme.name() === 'light' ? 'moon' : 'sun'" />
+          </button>
+          <select class="lang-select rt-input" aria-label="Language" [ngModel]="i18n.lang()" (ngModelChange)="i18n.lang.set($event)">
+            @for (l of langs; track l) {
+              <option [value]="l">{{ l.toUpperCase() }}</option>
+            }
+          </select>
+          <button class="rt-btn" (click)="logout()">{{ 'signout' | t }}</button>
+        </div>
+      </header>
+
+      <!-- every tab stays alive; only the one in front is shown (terminals keep their sessions) -->
+      <div class="panes">
+        @for (tab of tabs.list(); track tab.key) {
+          <div class="pane" [class.on]="tabs.active() === tab.key">
+            @switch (tab.kind) {
+              @case ('fleet') {
+                <dea-fleet-page />
+              }
+              @case ('device') {
+                <dea-device-page [nodeId]="tab.nodeId" />
+              }
+              @case ('term') {
+                <dea-term-tab [tab]="tab.term" />
+              }
+              @case ('logs') {
+                <dea-logs-page [agentKey]="tab.agentKey" [label]="tab.label" />
+              }
+            }
+          </div>
+        }
+      </div>
+    </div>
+    <dea-row-menu />
+  }
+}

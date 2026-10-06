@@ -42,9 +42,8 @@ type server struct {
 }
 
 func (s *server) routes() http.Handler {
-	static, _ := fs.Sub(web.FS, "static")
 	mux := http.NewServeMux()
-	mux.Handle("GET /", http.FileServerFS(static))
+	mux.Handle("GET /", uiHandler())
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 
 	mux.HandleFunc("POST /api/login", s.handleLogin)
@@ -588,4 +587,21 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// uiHandler serves the embedded UI build. Bundles have a content hash in their
+// name and never change; index.html is revalidated so a new version is picked
+// up on reload.
+func uiHandler() http.Handler {
+	dist, _ := fs.Sub(web.FS, "dist")
+	files := http.FileServerFS(dist)
+	hashed := regexp.MustCompile(`^/[a-z]+-[A-Z0-9]{8}\.(js|css)$`)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hashed.MatchString(r.URL.Path) {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		files.ServeHTTP(w, r)
+	})
 }
