@@ -10,7 +10,9 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -275,7 +277,9 @@ func (s *server) handleTerm(w http.ResponseWriter, r *http.Request) {
 	browser := &wsConn{Conn: bc}
 	defer browser.Close()
 
-	agentSide, err := s.openAgentSession(key, proto.Msg{Type: proto.TypeOpen, Cols: uint16(cols), Rows: uint16(rows)})
+	user := s.currentUser(r)
+	by := user + "@" + hostOf(r.RemoteAddr)
+	agentSide, err := s.openAgentSession(key, proto.Msg{Type: proto.TypeOpen, Cols: uint16(cols), Rows: uint16(rows), By: by})
 	if err != nil {
 		browser.WriteJSON(proto.Msg{Type: proto.TypeError, Error: err.Error()})
 		browser.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
@@ -283,7 +287,6 @@ func (s *server) handleTerm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer agentSide.Close()
 
-	user := s.currentUser(r)
 	start := time.Now()
 	tag := randID()[:8]
 	log.Printf("session open  id=%s agent=%s user=%q from=%s", tag, key, user, r.RemoteAddr)
@@ -292,7 +295,9 @@ func (s *server) handleTerm(w http.ResponseWriter, r *http.Request) {
 		s.hub.sessionDelta(key, -1)
 		log.Printf("session close id=%s agent=%s user=%q after=%s", tag, key, user, time.Since(start).Round(time.Second))
 	}()
-	splice(browser, agentSide)
+	uploads := newUploadAudit(hostname(), key, user, hostOf(r.RemoteAddr), tag)
+	defer uploads.close()
+	splice(browser, agentSide, uploads.frame)
 }
 
 // handleVNCCheck reports whether the POS VNC server is reachable, so the UI can
@@ -335,7 +340,7 @@ func (s *server) handleVNC(w http.ResponseWriter, r *http.Request) {
 		s.hub.sessionDelta(key, -1)
 		log.Printf("vnc close id=%s agent=%s user=%q after=%s", tag, key, user, time.Since(start).Round(time.Second))
 	}()
-	splice(browser, agentSide)
+	splice(browser, agentSide, nil)
 }
 
 // vncUpgrader also accepts the "binary" subprotocol older VNC clients ask for.
@@ -430,8 +435,9 @@ func (s *server) handleLogDownload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("logs download agent=%s files=%d bytes=%d user=%q from=%s after=%s", key, len(files), sent, s.currentUser(r), r.RemoteAddr, time.Since(start).Round(time.Millisecond))
 }
 
-// splice copies messages both ways until either side goes away.
-func splice(a, b *wsConn) {
+// splice copies messages both ways until either side goes away. tap, when set,
+// sees every frame; down = going from a (the upper side) to b.
+func splice(a, b *wsConn, tap func(down bool, mt int, data []byte)) {
 	done := make(chan struct{})
 	var once sync.Once
 	stop := func() { once.Do(func() { close(done) }) }
@@ -445,6 +451,9 @@ func splice(a, b *wsConn) {
 				return
 			}
 			src.SetReadDeadline(time.Now().Add(proto.ReadTimeout))
+			if tap != nil {
+				tap(src == a, mt, data)
+			}
 			if err := dst.WriteMessage(mt, data); err != nil {
 				return
 			}
@@ -595,7 +604,7 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 func uiHandler() http.Handler {
 	dist, _ := fs.Sub(web.FS, "dist")
 	files := http.FileServerFS(dist)
-	hashed := regexp.MustCompile(`^/[a-z]+-[A-Z0-9]{8}\.(js|css)$`)
+	hashed := regexp.MustCompile(`^/(media/)?[a-z-]+-[A-Z0-9]{8}\.(js|css|woff2?|ttf|eot|svg)$`)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hashed.MatchString(r.URL.Path) {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
@@ -604,4 +613,18 @@ func uiHandler() http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+// hostOf drops the port of a remote address.
+func hostOf(addr string) string {
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		return h
+	}
+	return addr
+}
+
+// hostname of this server, for the upload audit.
+func hostname() string {
+	h, _ := os.Hostname()
+	return h
 }

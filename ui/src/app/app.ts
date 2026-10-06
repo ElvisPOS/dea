@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, ChangeDetectionStrategy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DevicePage } from './device/device-page';
 import { FleetPage } from './fleet/fleet-page';
@@ -11,14 +11,32 @@ import { Tab, Tabs } from './core/tabs';
 import { Theme } from './core/theme';
 import { LoginPage } from './login/login-page';
 import { LogsPage } from './logs/logs-page';
-import { Icon } from './shared/ui';
+import { ButtonModule } from '@openng/optimus-ui/button';
+import { ConfirmDialogModule } from '@openng/optimus-ui/confirmdialog';
+import { SelectModule } from '@openng/optimus-ui/select';
+import { TooltipModule } from '@openng/optimus-ui/tooltip';
 import { TermTabView } from './terminal/term-tab-view';
 
 /** The app shell: login page, or the header bar with its tabs and the tab in front. */
 @Component({
   selector: 'dea-root',
-  imports: [FormsModule, LoginPage, FleetPage, DevicePage, TermTabView, LogsPage, RowMenuView, Icon, TPipe],
+  imports: [
+    FormsModule,
+    LoginPage,
+    FleetPage,
+    DevicePage,
+    TermTabView,
+    LogsPage,
+    RowMenuView,
+    ButtonModule,
+    ConfirmDialogModule,
+    SelectModule,
+    TooltipModule,
+    TPipe,
+  ],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.html',
+  host: { '(window:dragover)': 'refuseDrop($event)', '(window:drop)': 'refuseDrop($event)' },
 })
 export class App implements OnInit {
   protected session = inject(Session);
@@ -26,10 +44,19 @@ export class App implements OnInit {
   protected fleet = inject(FleetStore);
   protected theme = inject(Theme);
   protected i18n = inject(I18n);
-  protected langs = LANGS;
+  protected langOptions = LANGS.map((value) => ({ value, label: value.toUpperCase() }));
 
   /** Amber or red dot on the Fleet tab when something needs attention. */
-  protected fleetDot = computed(() => (this.fleet.counts().crit ? 'crit' : this.fleet.counts().warn ? 'warn' : ''));
+  protected fleetDot = computed(() =>
+    this.fleet.counts().crit ? 'crit' : this.fleet.counts().warn ? 'warn' : '',
+  );
+
+  /** A file dropped outside a terminal must not make the browser open it (and leave the app). */
+  protected refuseDrop(ev: DragEvent) {
+    if (ev.defaultPrevented || !ev.dataTransfer?.types.includes('Files')) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'none';
+  }
 
   ngOnInit() {
     this.session.start();
@@ -49,8 +76,17 @@ export class App implements OnInit {
     const kinds = new Set(views.map((v) => v.kind));
     return {
       state: cur?.state() ?? '',
-      kind: kinds.size === 2 ? this.i18n.t('tabkind.both') : kinds.has('screen') ? this.i18n.t('screen.kind') : this.i18n.t('tabkind.term'),
-      label: !first ? this.i18n.t('pane.empty') : pos.length > 1 ? `${first.label} +${pos.length - 1}` : first.label,
+      kind:
+        kinds.size === 2
+          ? this.i18n.t('tabkind.both')
+          : kinds.has('screen')
+            ? this.i18n.t('screen.kind')
+            : this.i18n.t('tabkind.term'),
+      label: !first
+        ? this.i18n.t('pane.empty')
+        : pos.length > 1
+          ? `${first.label} +${pos.length - 1}`
+          : first.label,
       title: pos.map((k) => this.fleet.keyLabel(k)).join('\n') || this.i18n.t('pane.empty'),
     };
   }

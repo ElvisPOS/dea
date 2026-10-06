@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -38,7 +39,7 @@ func (a *agent) session(open proto.Msg) {
 		return
 	}
 	defer tty.Close()
-	log.Printf("session %.8s: started %s (pid %d)", open.Session, a.shell, cmd.Process.Pid)
+	log.Printf("session %.8s: started %s (pid %d) for %s", open.Session, a.shell, cmd.Process.Pid, orUnknown(open.By))
 
 	// Shell output -> server.
 	outDone := make(chan struct{})
@@ -58,9 +59,10 @@ func (a *agent) session(open proto.Msg) {
 		}
 	}()
 
-	// Server -> shell input / resize.
+	// Server -> shell input / resize, and files dropped on the terminal.
 	go func() {
 		watchDeadline(c.Conn)
+		var up *upload // the file being received, if any
 		for {
 			mt, data, err := c.ReadMessage()
 			if err != nil {
@@ -68,13 +70,44 @@ func (a *agent) session(open proto.Msg) {
 			}
 			c.SetReadDeadline(time.Now().Add(proto.ReadTimeout))
 			if mt == websocket.BinaryMessage {
-				tty.Write(data)
+				if up != nil {
+					up = a.receive(c, open.Session, open.By, up, data)
+				} else {
+					tty.Write(data)
+				}
 				continue
 			}
 			var m proto.Msg
-			if json.Unmarshal(data, &m) == nil && m.Type == proto.TypeResize && m.Cols > 0 && m.Rows > 0 {
-				pty.Setsize(tty, &pty.Winsize{Cols: m.Cols, Rows: m.Rows})
+			if json.Unmarshal(data, &m) != nil {
+				continue
 			}
+			switch m.Type {
+			case proto.TypeResize:
+				if m.Cols > 0 && m.Rows > 0 {
+					pty.Setsize(tty, &pty.Winsize{Cols: m.Cols, Rows: m.Rows})
+				}
+			case proto.TypeUpload:
+				if up != nil {
+					const busy = "another upload is in progress"
+					c.send(proto.Msg{Type: proto.TypeUploadError, Name: m.Name, Error: busy})
+					auditUpload(uploadEvent{Event: "refused", Session: open.Session, By: open.By, Name: m.Name, Size: m.Size, Error: busy})
+					continue
+				}
+				up = a.beginUpload(c, open.Session, open.By, tty, cmd.Process.Pid, m)
+				if up != nil && up.complete() { // empty file
+					up = a.receive(c, open.Session, open.By, up, nil)
+				}
+			case proto.TypeUploadCancel:
+				if up != nil {
+					up.abort()
+					auditUpload(up.event("cancelled", open.Session, open.By, "cancelled by the user"))
+					up = nil
+				}
+			}
+		}
+		if up != nil {
+			up.abort()
+			auditUpload(up.event("interrupted", open.Session, open.By, "the terminal closed during the upload"))
 		}
 		// Browser went away: hang up the shell's whole process group.
 		syscall.Kill(-cmd.Process.Pid, syscall.SIGHUP)
@@ -133,4 +166,70 @@ func (b *capBuffer) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	return b.Buffer.Write(p)
+}
+
+// beginUpload answers an upload request: ready (with the target path), or an error.
+func (a *agent) beginUpload(c *conn, sid, by string, tty *os.File, shellPid int, m proto.Msg) *upload {
+	ev := uploadEvent{Session: sid, By: by, Name: m.Name, Size: m.Size}
+	fail := func(err error) *upload {
+		c.send(proto.Msg{Type: proto.TypeUploadError, Name: m.Name, Error: err.Error()})
+		ev.Event, ev.Error = "refused", err.Error()
+		auditUpload(ev)
+		return nil
+	}
+	dir, err := terminalDir(tty, shellPid)
+	if err != nil {
+		return fail(err)
+	}
+	ev.Path = filepath.Join(dir, m.Name)
+	up, exists, err := startUpload(dir, m)
+	if err != nil {
+		return fail(err)
+	}
+	if exists {
+		c.send(proto.Msg{Type: proto.TypeUploadError, Name: m.Name, Path: ev.Path, Exists: true})
+		ev.Event, ev.Error = "exists", "file exists, the user is asked to replace it"
+		auditUpload(ev)
+		return nil
+	}
+	auditUpload(up.event("started", sid, by, ""))
+	c.send(proto.Msg{Type: proto.TypeUploadReady, Name: up.name, Path: up.path})
+	return up
+}
+
+// receive stores a chunk and reports progress; it returns nil once the file is complete.
+// After a write error the browser is told once; it then cancels, and anything
+// still in flight is read and dropped.
+func (a *agent) receive(c *conn, sid, by string, up *upload, data []byte) *upload {
+	if err := up.write(data); err != nil {
+		c.send(proto.Msg{Type: proto.TypeUploadError, Name: up.name, Path: up.path, Error: err.Error()})
+		auditUpload(up.event("failed", sid, by, err.Error()))
+	}
+	switch {
+	case !up.complete():
+		if !up.failed && up.got-up.lastAck >= progressStep {
+			up.lastAck = up.got
+			c.send(proto.Msg{Type: proto.TypeUploadProgress, Name: up.name, Size: up.got})
+		}
+		return up
+	case up.failed:
+		up.abort()
+	default:
+		if err := up.finish(); err != nil {
+			c.send(proto.Msg{Type: proto.TypeUploadError, Name: up.name, Path: up.path, Error: err.Error()})
+			auditUpload(up.event("failed", sid, by, err.Error()))
+			return nil
+		}
+		ev := up.event("saved", sid, by, "")
+		auditUpload(ev)
+		c.send(proto.Msg{Type: proto.TypeUploadDone, Name: up.name, Path: up.path, Size: up.size, SHA256: ev.SHA256, Replaced: up.replaced, OldSize: up.oldSize})
+	}
+	return nil
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "an unknown user (server older than v2.3.1)"
+	}
+	return s
 }

@@ -34,6 +34,15 @@ const (
 	TypeResize = "resize" // browser -> agent
 	TypeExit   = "exit"   // agent -> browser
 	TypeError  = "error"  // any hop -> browser
+
+	// Session channel of a terminal: a file dropped on it, saved in the
+	// terminal's current folder (see cmd/dea-agent/upload.go).
+	TypeUpload         = "upload"          // browser -> agent: Name, Size, Overwrite; then Size bytes in binary frames
+	TypeUploadReady    = "upload_ready"    // agent -> browser: Path; send the bytes
+	TypeUploadProgress = "upload_progress" // agent -> browser: Size bytes saved so far
+	TypeUploadDone     = "upload_done"     // agent -> browser: Path, Size
+	TypeUploadError    = "upload_error"    // agent -> browser: Error, or Exists with Path
+	TypeUploadCancel   = "upload_cancel"   // browser -> agent
 )
 
 // Msg is the single envelope used for every JSON message; unused fields are omitted.
@@ -55,6 +64,7 @@ type Msg struct {
 
 	// open / resize
 	Session string `json:"session,omitempty"`
+	By      string `json:"by,omitempty"` // open: who asked for the session, "user@address" (agents log it with uploads)
 	Cols    uint16 `json:"cols,omitempty"`
 	Rows    uint16 `json:"rows,omitempty"`
 
@@ -71,6 +81,16 @@ type Msg struct {
 
 	// log_download: absolute paths, as listed by log_list
 	Files []string `json:"files,omitempty"`
+
+	// upload*
+	Name      string `json:"name,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	Overwrite bool   `json:"overwrite,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Exists    bool   `json:"exists,omitempty"`
+	SHA256    string `json:"sha256,omitempty"`   // upload_done: of the saved file
+	Replaced  bool   `json:"replaced,omitempty"` // upload_done: an existing file was replaced
+	OldSize   int64  `json:"old_size,omitempty"` // upload_done: size of the replaced file
 
 	// stats (agent), agents (store): resource usage of the sending host
 	Stats *Stats `json:"stats,omitempty"`

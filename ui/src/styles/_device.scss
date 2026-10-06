@@ -23,7 +23,7 @@
 .card td.k { color: var(--ink-muted); width: 38%; }
 .offnote { padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-sunken); border: 1px dashed var(--border-strong); color: var(--ink-muted); font-size: 12px; }
 .runbox { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
-.runbox .rt-input:first-child { flex: 1; font-family: var(--font-mono); }
+.runbox .cmd { flex: 1; font-family: var(--font-mono); }
 .term-out { background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; font: 12px/1.45 var(--font-mono); min-height: 84px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; }
 .term-out .p { color: var(--ok-ink); }
 .term-out .bad { color: var(--crit-ink); }

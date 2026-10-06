@@ -21,9 +21,7 @@ export class Theme {
 
   constructor() {
     effect(() => {
-      const light = this.name() === 'light';
-      if (light) document.documentElement.dataset['theme'] = 'light';
-      else delete document.documentElement.dataset['theme'];
+      document.documentElement.dataset['theme'] = this.name();
       savePref('dea.theme', this.name());
     });
   }

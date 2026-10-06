@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"dea/internal/logfile"
 	"dea/internal/proto"
 	"dea/internal/sysstat"
 )
@@ -51,6 +53,22 @@ func env(k, def string) string {
 }
 
 func main() {
+	// DEA_LOG_DIR: also write the log to <dir>/dea-server.log (10 MB, 5 old files
+	// kept; docker service logs keeps working) and the upload audit trail to
+	// <dir>/uploads.log (10 MB, 20 old files kept).
+	if dir := os.Getenv("DEA_LOG_DIR"); dir != "" {
+		if f, err := logfile.Open(dir, "dea-server.log", 10<<20, 5); err != nil {
+			log.Printf("log file: %v", err)
+		} else {
+			log.SetOutput(io.MultiWriter(os.Stderr, f))
+		}
+		// the upload audit trail: one JSON line per upload event, kept longer
+		if f, err := logfile.Open(dir, "uploads.log", 10<<20, 20); err != nil {
+			log.Printf("upload log: %v", err)
+		} else {
+			uploadLog = f
+		}
+	}
 	cfg := config{
 		Listen:        env("DEA_LISTEN", ":"+deaPort),
 		DataDir:       env("DEA_DATA", "./data"),

@@ -19,7 +19,7 @@ export default defineConfig({
     locale: 'en-US',
     timezoneId: 'Europe/Rome',
   },
-  expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.005, animations: 'disabled', caret: 'hide' } },
+  expect: { toHaveScreenshot: { maxDiffPixels: 100, animations: 'disabled', caret: 'hide' } },
   webServer: {
     command: 'npm run mock',
     url: 'http://localhost:4300',

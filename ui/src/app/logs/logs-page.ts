@@ -1,4 +1,15 @@
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+  ChangeDetectionStrategy,
+} from '@angular/core';
+import { ButtonModule } from '@openng/optimus-ui/button';
+import { TableModule } from '@openng/optimus-ui/table';
+import { TooltipModule } from '@openng/optimus-ui/tooltip';
 import { Backend } from '../core/backend';
 import { FleetStore } from '../core/fleet-store';
 import { I18n, TPipe } from '../core/i18n';
@@ -15,8 +26,9 @@ function humanSize(n: number) {
 /** A POS's log files under /usr/share/elvispos, downloadable as one .tar.gz. */
 @Component({
   selector: 'dea-logs-page',
-  imports: [TPipe],
+  imports: [ButtonModule, TableModule, TooltipModule, TPipe],
   templateUrl: './logs-page.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   host: { class: 'pane-body logs' },
 })
 export class LogsPage implements OnInit {
@@ -34,27 +46,30 @@ export class LogsPage implements OnInit {
   protected busy = signal('');
   protected humanSize = humanSize;
 
-  protected groups = computed(() => {
-    const g = new Map<string, LogFile[]>();
-    for (const f of this.files() || []) {
-      const dir = f.path.slice(0, f.path.lastIndexOf('/'));
-      if (!g.has(dir)) g.set(dir, []);
-      g.get(dir)!.push(f);
-    }
-    return [...g].map(([dir, files]) => ({ dir, files }));
-  });
+  /** Files with their folder (the table groups rows by it) and base name. */
+  protected rows = computed(() =>
+    (this.files() || []).map((f) => ({
+      ...f,
+      dir: f.path.slice(0, f.path.lastIndexOf('/')),
+      base: f.name.slice(f.name.lastIndexOf('/') + 1),
+    })),
+  );
+  protected selection = computed(() => this.rows().filter((f) => this.selected().has(f.path)));
 
   protected status = computed(() => {
     if (this.busy()) return this.busy();
     const files = this.files() || [];
     const sel = files.filter((f) => this.selected().has(f.path));
     return sel.length
-      ? this.i18n.t('logs.selected', { n: sel.length, size: humanSize(sel.reduce((s, f) => s + f.size, 0)) })
-      : this.i18n.t('logs.count', { n: files.length, size: humanSize(files.reduce((s, f) => s + f.size, 0)) });
+      ? this.i18n.t('logs.selected', {
+          n: sel.length,
+          size: humanSize(sel.reduce((s, f) => s + f.size, 0)),
+        })
+      : this.i18n.t('logs.count', {
+          n: files.length,
+          size: humanSize(files.reduce((s, f) => s + f.size, 0)),
+        });
   });
-
-  protected allChecked = computed(() => !!this.files()?.length && this.selected().size === this.files()!.length);
-  protected someChecked = computed(() => this.selected().size > 0 && !this.allChecked());
 
   ngOnInit() {
     this.load();
@@ -75,18 +90,8 @@ export class LogsPage implements OnInit {
     }
   }
 
-  protected toggle(path: string, on: boolean) {
-    const s = new Set(this.selected());
-    on ? s.add(path) : s.delete(path);
-    this.selected.set(s);
-  }
-
-  protected toggleAll(on: boolean) {
-    this.selected.set(new Set(on ? (this.files() || []).map((f) => f.path) : []));
-  }
-
-  protected baseName(f: LogFile) {
-    return f.name.slice(f.name.lastIndexOf('/') + 1);
+  protected select(files: LogFile[]) {
+    this.selected.set(new Set(files.map((f) => f.path)));
   }
 
   protected downloadSelected() {

@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import { Locator, Page, expect } from '@playwright/test';
 
 export const NOW = new Date('2026-10-06T09:00:00+02:00');
 
@@ -34,4 +34,22 @@ export function row(page: Page, name: string) {
 /** Screenshot options: terminals are masked (their cursor blinks). */
 export function shot(page: Page) {
   return { mask: [page.locator('.xterm-screen')], fullPage: false };
+}
+
+/** Drops files (name and text content) on an element, as dragging them from the desktop does. */
+export async function dropFiles(page: Page, target: Locator, files: { name: string; text: string }[], only: 'over' | 'drop' = 'drop') {
+  const dt = await page.evaluateHandle((fs) => {
+    const d = new DataTransfer();
+    for (const f of fs) d.items.add(new File([f.text], f.name));
+    return d;
+  }, files);
+  await target.dispatchEvent('dragover', { dataTransfer: dt });
+  if (only === 'drop') await target.dispatchEvent('drop', { dataTransfer: dt });
+}
+
+/** Opens the 4POS VM terminal (mock) and waits for its prompt. */
+export async function openTerminal(page: Page) {
+  await row(page, '#3 4POS VM').locator('.rt-act').nth(1).click();
+  await expect(page.locator('.term-head .dot.on')).toHaveCount(1);
+  return page.locator('.term-cell').first();
 }

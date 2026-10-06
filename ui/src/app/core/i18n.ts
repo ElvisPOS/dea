@@ -36,10 +36,14 @@ export class I18n {
     return msg;
   }
 
+  /** The time "ago" texts count from: one tick per second, so a page never changes mid-render. */
+  readonly now = signal(Date.now());
+  private tick = setInterval(() => this.now.set(Date.now()), 1000);
+
   /** "5s", "3m", "2h", "4d" since an ISO time. */
   ago(iso?: string | null): string {
     if (!iso || iso.startsWith('0001')) return this.t('time.never');
-    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    const s = Math.max(0, (this.now() - new Date(iso).getTime()) / 1000);
     if (s < 60) return `${Math.floor(s)}${this.t('unit.s')}`;
     if (s < 3600) return `${Math.floor(s / 60)}${this.t('unit.m')}`;
     if (s < 86400) return `${Math.floor(s / 3600)}${this.t('unit.h')}`;

@@ -18,14 +18,9 @@
 .tab-close:hover { color: var(--ink); background: var(--bg-hover); }
 .bar-r { display: flex; gap: var(--space-2); align-items: center; flex: none; }
 .layout-btns { display: flex; gap: 2px; align-items: center; flex: none; }
-.layout-btns button { display: grid; place-items: center; width: 30px; height: 26px; background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; }
-.layout-btns button:hover { border-color: var(--border); }
-.layout-btns button.on { background: var(--accent-soft); border-color: var(--accent-soft); }
+.layout-btns .layout-btn { display: grid; place-items: center; width: 30px; height: 26px; background: transparent; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; }
+.layout-btns .layout-btn:hover { border-color: var(--border); }
+.layout-btns .layout-btn.on { background: var(--accent-soft); border-color: var(--accent-soft); }
 .layout-btns svg { width: 16px; height: 12px; fill: none; stroke: var(--ink-muted); stroke-width: 1.3; }
-.layout-btns button.on svg, .layout-btns button:hover svg { stroke: var(--accent); }
-.theme-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.theme-btn .sun { display: none; }
-:root:not([data-theme="light"]) .theme-btn .sun { display: block; }
-:root:not([data-theme="light"]) .theme-btn .moon { display: none; }
-.lang-select { height: 30px; }
+.layout-btns .layout-btn.on svg, .layout-btns .layout-btn:hover svg { stroke: var(--accent); }
 

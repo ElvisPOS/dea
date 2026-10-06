@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { TPipe } from '../core/i18n';
 
 /** Column headers of the fleet list (same grid as the rows). */
@@ -6,6 +6,7 @@ import { TPipe } from '../core/i18n';
   selector: 'dea-list-head',
   imports: [TPipe],
   host: { class: 'rt-grid rt-head', role: 'row' },
+  changeDetection: ChangeDetectionStrategy.Eager,
   template: `<span></span>
     <span>{{ 'col.device' | t }}</span>
     <span>{{ 'col.cpu' | t }}</span>

@@ -32,20 +32,13 @@
 .term-host .xterm { height: 100%; }
 .term-empty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; }
 .term-empty p { margin: 0; }
-.term-empty select { min-width: 220px; }
+.term-empty .pick { min-width: 260px; text-align: left; }
 
 /* terminals, logs and screens */
-/* row actions */
-.row-btn {
-  font: 12px var(--sans); color: var(--muted); background: var(--panel); border: 1px solid var(--line);
-  border-radius: 5px; padding: 2px 8px; cursor: pointer;
-}
-.row-btn:hover { color: var(--text); border-color: var(--accent); }
 .tab-kind { display: inline-flex; align-items: center; height: 16px; padding: 0 5px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-soft-ink); font: 700 10px/16px var(--font-sans); letter-spacing: .04em; flex: none; }
 
 /* "Type in all": keystrokes go to every pane of the tab */
-.layout-btns .sync-btn { width: auto; padding: 0 9px; margin-right: 8px; font: 12px var(--sans); color: var(--muted); border-color: var(--line); }
-.layout-btns .sync-btn:disabled { opacity: .4; cursor: default; }
+.layout-btns .sync-btn { margin-right: 8px; }
 .layout-btns .sync-btn.on { color: var(--on-warn); background: var(--warn); border-color: var(--warn); font-weight: 600; }
 .tab.sync .tab-label::after { content: " · " attr(data-all); color: var(--warn); font-weight: 600; }
 .term-tab.sync .term-cell { border-color: var(--warn); }
@@ -82,5 +75,20 @@
   .two { grid-template-columns: 1fr; }
   .brand small { display: none; }
   .pane-body { padding: var(--space-4) var(--space-4) 96px; }
-  .tools .rt-input[type="search"] { width: 100%; }
+  .tools .search { width: 100%; }
 }
+
+/* files dropped on a terminal */
+.drop-overlay { position: absolute; inset: 6px; z-index: 5; display: grid; place-content: center; justify-items: center; gap: 6px; border: 2px dashed var(--accent); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--bg-page) 82%, transparent); color: var(--ink); pointer-events: none; text-align: center; }
+.drop-overlay .pi { font-size: 28px; color: var(--accent); }
+.drop-overlay b { font-size: 14px; }
+.drop-overlay span { font-size: 12px; color: var(--ink-muted); }
+.upload-status { position: absolute; right: 10px; bottom: 10px; z-index: 4; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 20px); padding: 4px 4px 4px 12px; font-size: 12px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); }
+.upload-status > span:not(.upload-bar) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-status .pi { color: var(--accent); }
+.upload-status.is-done .pi { color: var(--ok); }
+.upload-status.is-error { border-color: var(--crit); }
+.upload-status.is-error .pi { color: var(--crit-ink); }
+.upload-bar { flex: none; width: 90px; height: 4px; border-radius: 2px; background: var(--meter-track); overflow: hidden; }
+.upload-bar span { display: block; height: 100%; background: var(--accent); }
+.term-head-btn .pi { font-size: 10px; }

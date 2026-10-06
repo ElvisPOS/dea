@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"dea/internal/logfile"
 	"dea/internal/proto"
 	"dea/internal/sysstat"
 )
@@ -49,7 +51,9 @@ func main() {
 		println(version)
 		return
 	}
-	log.SetFlags(0) // journald adds timestamps
+	// stdout goes to log/dea-agent.log (see the start script): stamp every line
+	log.SetFlags(log.LstdFlags)
+	openUploadLog()
 	if *server == "" || *token == "" {
 		log.Fatal("DEA_SERVER and DEA_TOKEN are required")
 	}
@@ -309,4 +313,18 @@ func localIPs() []string {
 		}
 	}
 	return ips
+}
+
+// openUploadLog opens log/uploads.log next to the agent binary, the upload audit trail.
+func openUploadLog() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	f, err := logfile.Open(filepath.Join(filepath.Dir(exe), "log"), "uploads.log", 10<<20, 10)
+	if err != nil {
+		log.Printf("upload log: %v", err)
+		return
+	}
+	uploadLog = f
 }

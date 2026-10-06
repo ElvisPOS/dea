@@ -23,25 +23,27 @@
 }
 
 <div class="tools">
-  <input class="rt-input" type="search" [placeholder]="'home.search' | t" autocomplete="off" [ngModel]="fleet.query()" (ngModelChange)="fleet.query.set($event.trim())" />
-  <div class="rt-seg" role="group">
-    @for (f of ['all', 'online', 'offline', 'warn']; track f) {
-      <button [attr.aria-pressed]="fleet.filter() === f" (click)="setFilter($any(f))">{{ 'filter.' + f | t }}</button>
-    }
-  </div>
-  <label class="sort">
-    <span>{{ 'sort.label' | t }}</span>
-    <select class="rt-input" [ngModel]="fleet.sort()" (ngModelChange)="fleet.sort.set($event)">
-      <option value="az">{{ 'sort.az' | t }}</option>
-      <option value="store">{{ 'sort.store' | t }}</option>
-    </select>
-  </label>
+  <p-iconfield class="search">
+    <p-inputicon class="pi pi-search" />
+    <input pInputText type="search" [placeholder]="'home.search' | t" autocomplete="off" [ngModel]="fleet.query()" (ngModelChange)="fleet.query.set($event.trim())" />
+  </p-iconfield>
+  <p-selectbutton
+    class="filter"
+    [options]="filterOptions()"
+    optionLabel="label"
+    optionValue="value"
+    [allowEmpty]="false"
+    [ngModel]="fleet.filter()"
+    (ngModelChange)="setFilter($event)"
+  />
+  <label class="sort" for="fleet-sort">{{ 'sort.label' | t }}</label>
+  <p-select inputId="fleet-sort" [options]="sortOptions()" optionLabel="label" optionValue="value" [ngModel]="fleet.sort()" (ngModelChange)="fleet.sort.set($event)" />
   <span class="spacer"></span>
   @if (c().stores) {
-    <button class="rt-btn is-ghost" (click)="expandAll(true)">{{ 'groups.expandAll' | t }}</button>
-    <button class="rt-btn is-ghost" (click)="expandAll(false)">{{ 'groups.collapseAll' | t }}</button>
+    <button pButton severity="secondary" [text]="true" (click)="expandAll(true)">{{ 'groups.expandAll' | t }}</button>
+    <button pButton severity="secondary" [text]="true" (click)="expandAll(false)">{{ 'groups.collapseAll' | t }}</button>
   }
-  <button class="rt-btn is-primary" (click)="openAdd()"><dea-icon name="plus" />{{ 'add.button' | t }}</button>
+  <button pButton icon="pi pi-plus" [label]="'add.button' | t" (click)="addOpen.set(true)"></button>
 </div>
 
 <div class="rt-list-wrap">
@@ -60,49 +62,38 @@
 @if (fleet.selected().size) {
   <div class="bulk">
     <b>{{ 'bulk.n' | t: { n: fleet.selected().size } }}{{ selectedOffline() ? ('bulk.off' | t: { n: selectedOffline() }) : '' }}</b>
-    <input class="rt-input" [placeholder]="'bulk.placeholder' | t" spellcheck="false" [ngModel]="cmd()" (ngModelChange)="cmd.set($event)" (keydown.enter)="run()" />
-    <select class="rt-input" [ngModel]="timeout()" (ngModelChange)="timeout.set(+$event)">
-      <option [ngValue]="10">10 s</option>
-      <option [ngValue]="30">30 s</option>
-      <option [ngValue]="120">2 min</option>
-      <option [ngValue]="600">10 min</option>
-    </select>
-    <button class="rt-btn is-primary" [disabled]="running() || !cmd().trim()" (click)="run()">{{ 'bulk.run' | t }}</button>
-    <button class="rt-btn is-ghost" (click)="clearSelection()">{{ 'bulk.clear' | t }}</button>
+    <input pInputText class="cmd" [placeholder]="'bulk.placeholder' | t" spellcheck="false" [ngModel]="cmd()" (ngModelChange)="cmd.set($event)" (keydown.enter)="run()" />
+    <p-select [options]="timeouts" optionLabel="label" optionValue="value" [ngModel]="timeout()" (ngModelChange)="timeout.set($event)" appendTo="body" />
+    <button pButton [disabled]="running() || !cmd().trim()" (click)="run()">{{ 'bulk.run' | t }}</button>
+    <button pButton severity="secondary" [text]="true" (click)="clearSelection()">{{ 'bulk.clear' | t }}</button>
   </div>
 }
 
 <!-- "Add store or POS" -->
-<dialog class="dlg" #addDialog (click)="closeAdd($event)">
-  <div class="dlg-head">
-    <h2 class="sec-title" style="margin: 0">{{ 'add.button' | t }}</h2>
-    <button class="rt-btn is-ghost" data-close-dialog>{{ 'dialog.close' | t }}</button>
-  </div>
-  <div class="dlg-body">
-    @if (session.me()?.upstream) {
-      <section>
-        <h3 class="sec-title">{{ 'upstream.title' | t }}</h3>
-        <p>{{ 'upstream.text' | t: { url: session.me()!.upstream, id: session.me()!.store_id } }}</p>
-      </section>
-    }
-    @if (session.me()?.store_setup; as setup) {
-      <section>
-        <h3 class="sec-title">{{ 'addStore.title' | t }}</h3>
-        <p [innerHTML]="'addStore.desc_html' | t"></p>
-        <div class="codebox">
-          <code class="pre">{{ setup }}</code>
-          <button #b1 class="rt-btn" (click)="copy(setup, b1)">{{ 'copy' | t }}</button>
-        </div>
-      </section>
-    }
+<p-dialog [header]="'add.button' | t" [modal]="true" [dismissableMask]="true" [draggable]="false" styleClass="add-dialog" [(visible)]="addOpen">
+  @if (session.me()?.upstream) {
     <section>
-      <h3 class="sec-title">{{ (session.me()?.store_setup ? 'addPos.titleDirect' : 'addPos.title') | t }}</h3>
-      <p [innerHTML]="'addPos.desc_html' | t"></p>
-      <div class="codebox">
-        <code>ecli dea install</code>
-        <button #b2 class="rt-btn" (click)="copy('ecli dea install', b2)">{{ 'copy' | t }}</button>
-      </div>
-      <p [innerHTML]="'addPos.options_html' | t"></p>
+      <h3 class="sec-title">{{ 'upstream.title' | t }}</h3>
+      <p>{{ 'upstream.text' | t: { url: session.me()!.upstream, id: session.me()!.store_id } }}</p>
     </section>
-  </div>
-</dialog>
+  }
+  @if (session.me()?.store_setup; as setup) {
+    <section>
+      <h3 class="sec-title">{{ 'addStore.title' | t }}</h3>
+      <p [innerHTML]="'addStore.desc_html' | t"></p>
+      <div class="codebox">
+        <code class="pre">{{ setup }}</code>
+        <button pButton severity="secondary" size="small" [icon]="copied() === 'store' ? 'pi pi-check' : 'pi pi-copy'" [label]="(copied() === 'store' ? 'copied' : 'copy') | t" (click)="copy(setup, 'store')"></button>
+      </div>
+    </section>
+  }
+  <section>
+    <h3 class="sec-title">{{ (session.me()?.store_setup ? 'addPos.titleDirect' : 'addPos.title') | t }}</h3>
+    <p [innerHTML]="'addPos.desc_html' | t"></p>
+    <div class="codebox">
+      <code>ecli dea install</code>
+      <button pButton severity="secondary" size="small" [icon]="copied() === 'pos' ? 'pi pi-check' : 'pi pi-copy'" [label]="(copied() === 'pos' ? 'copied' : 'copy') | t" (click)="copy('ecli dea install', 'pos')"></button>
+    </div>
+    <p [innerHTML]="'addPos.options_html' | t"></p>
+  </section>
+</p-dialog>

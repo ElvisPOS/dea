@@ -8,7 +8,8 @@
   <link rel="icon" type="image/png" href="dea-icon.png">
   <script>
     // apply the saved theme before the first paint (no flash of the wrong theme)
-    try { if (JSON.parse(localStorage.getItem("dea.theme")) === "light") document.documentElement.dataset.theme = "light"; } catch (e) {}
+    var t = "dark"; try { if (JSON.parse(localStorage.getItem("dea.theme")) === "light") t = "light"; } catch (e) {}
+    document.documentElement.dataset.theme = t;
   </script>
 </head>
 <body>

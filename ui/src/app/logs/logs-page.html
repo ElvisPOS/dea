@@ -5,9 +5,9 @@
     <span class="muted logs-status">{{ note() || status() }}</span>
   </div>
   <span class="spacer"></span>
-  <button class="rt-btn" (click)="load()">{{ 'logs.refresh' | t }}</button>
-  <button class="rt-btn" [disabled]="!!busy() || !selected().size" (click)="downloadSelected()">{{ 'logs.downloadSelected' | t }}</button>
-  <button class="rt-btn is-primary" [disabled]="!!busy() || !files()?.length" (click)="download(null)">{{ 'logs.downloadAll' | t }}</button>
+  <button pButton severity="secondary" icon="pi pi-refresh" [label]="'logs.refresh' | t" (click)="load()"></button>
+  <button pButton severity="secondary" [disabled]="!!busy() || !selected().size" (click)="downloadSelected()">{{ 'logs.downloadSelected' | t }}</button>
+  <button pButton icon="pi pi-download" [label]="'logs.downloadAll' | t" [loading]="!!busy()" [disabled]="!files()?.length" (click)="download(null)"></button>
 </div>
 
 @if (files() === null) {
@@ -17,25 +17,42 @@
 } @else if (!files()!.length) {
   <p class="muted">{{ 'logs.none' | t }}</p>
 } @else {
-  <table class="logs-table">
-    <tr>
-      <th><input type="checkbox" [checked]="allChecked()" [indeterminate]="someChecked()" (change)="toggleAll($any($event.target).checked)" /></th>
-      <th>{{ 'logs.file' | t }}</th>
-      <th class="num">{{ 'logs.size' | t }}</th>
-      <th>{{ 'logs.modified' | t }}</th>
-      <th></th>
-    </tr>
-    @for (g of groups(); track g.dir) {
-      <tr class="logs-group"><td colspan="5">{{ g.dir }}</td></tr>
-      @for (f of g.files; track f.path) {
-        <tr>
-          <td><input type="checkbox" [checked]="selected().has(f.path)" (change)="toggle(f.path, $any($event.target).checked)" /></td>
-          <td class="mono" [title]="f.path">{{ baseName(f) }}</td>
-          <td class="num mono">{{ humanSize(f.size) }}</td>
-          <td [title]="f.mtime">{{ 'logs.ago' | t: { ago: i18n.ago(f.mtime) } }}</td>
-          <td class="act"><button class="row-btn" (click)="download([f.path])">{{ 'logs.download' | t }}</button></td>
-        </tr>
-      }
-    }
-  </table>
+  <p-table
+    styleClass="logs-table"
+    size="small"
+    dataKey="path"
+    selectionMode="multiple"
+    [metaKeySelection]="false"
+    rowGroupMode="subheader"
+    groupRowsBy="dir"
+    [value]="rows()"
+    [selection]="selection()"
+    (selectionChange)="select($event)"
+  >
+    <ng-template #header>
+      <tr>
+        <th class="check"><p-tableHeaderCheckbox /></th>
+        <th>{{ 'logs.file' | t }}</th>
+        <th class="num">{{ 'logs.size' | t }}</th>
+        <th>{{ 'logs.modified' | t }}</th>
+        <th></th>
+      </tr>
+    </ng-template>
+    <ng-template #groupheader let-f>
+      <tr class="logs-group">
+        <td colspan="5">{{ f.dir }}</td>
+      </tr>
+    </ng-template>
+    <ng-template #body let-f>
+      <tr [pSelectableRow]="f">
+        <td class="check"><p-tableCheckbox [value]="f" /></td>
+        <td class="mono" [pTooltip]="f.path" tooltipPosition="top" [showDelay]="400">{{ f.base }}</td>
+        <td class="num mono">{{ humanSize(f.size) }}</td>
+        <td [pTooltip]="f.mtime" [showDelay]="400">{{ 'logs.ago' | t: { ago: i18n.ago(f.mtime) } }}</td>
+        <td class="act">
+          <button pButton severity="secondary" size="small" [outlined]="true" (click)="$event.stopPropagation(); download([f.path])">{{ 'logs.download' | t }}</button>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
 }

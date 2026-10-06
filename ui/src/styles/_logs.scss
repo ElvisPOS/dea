@@ -5,13 +5,9 @@
 .logs-title h2 { font: 600 16px var(--mono); margin: 0; }
 .logs-status { font-size: 12.5px; margin-top: 4px; }
 .logs-head .btn { white-space: nowrap; }
-.logs-table { width: 100%; max-width: 1000px; border-collapse: collapse; font-size: 13px; }
-.logs-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
-.logs-table td { padding: 6px 10px; border-bottom: 1px solid var(--panel-2); }
-.logs-table tr:hover td { background: var(--panel); }
+.logs-table { max-width: 1000px; }
 .logs-table .num { text-align: right; }
 .logs-table .mono { font-family: var(--mono); font-size: 12.5px; }
 .logs-table .act { text-align: right; width: 1%; }
-.logs-table th:first-child, .logs-table td:first-child { width: 1%; }
-.logs-group td { color: var(--accent); font: 600 12px var(--mono); padding-top: 14px; border-bottom: 1px solid var(--line); background: transparent !important; }
-
+.logs-table .check { width: 1%; }
+.logs-table .logs-group td { color: var(--accent); font: 600 12px var(--mono); padding-top: 14px; }

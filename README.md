@@ -62,6 +62,35 @@ ecli writes `dea.env` and adds
 root's crontab; no system service. Shells run as `elvispos`. Remove with `ecli dea uninstall`, check with
 `ecli dea status`. Logs: `/usr/share/elvispos/dea/log/dea-agent.log`.
 
+## Upload a file to a POS
+
+Drop files on a terminal pane (or use **Upload** in its header): they are saved in the folder the
+terminal is in at that moment, i.e. where `cd` took you, as `elvispos`. DEA asks before replacing a
+file (a replaced file keeps its permissions), refuses folders (zip them) and files over 1 GB, and
+checks free space first. The file is written next to its target under a temporary name and renamed
+when complete, so a cancelled or broken upload leaves nothing behind.
+
+The file travels inside the terminal's own WebSocket, through central and the store unchanged; only
+the POS agent and the browser take part, so it needs dea-agent v2.3.0 or later on the POS (older
+agents get an "update the agent" message and receive nothing). Writing into a root-only folder
+fails with "no permission": upload to `/tmp` and `sudo mv`.
+
+Every upload is audited, from the request to its outcome, on both ends:
+
+- the server the user signed in to (and each store it passes through) logs every event in
+  `logs/dea/dea-server.log` and writes one JSON line per event to `logs/dea/uploads.log` (10 MB,
+  20 old files kept): user, browser address, POS, file name, size, overwrite asked, final path,
+  bytes sent, SHA-256 of the saved file, replaced file and its old size, duration, error;
+- the POS agent logs the same in `/usr/share/elvispos/dea/log/dea-agent.log` and
+  `/usr/share/elvispos/dea/log/uploads.log`, with the DEA user who opened the terminal
+  (`by: admin@10.8.0.5`, sent by central when the terminal opens).
+
+Events: `requested`, `exists` (the user is asked to replace), `refused` (with the reason),
+`started`, `saved`, `failed`, `cancelled` and `interrupted` (the terminal closed mid-upload).
+The agent never puts a file in place without its `saved` line and SHA-256. The server's record
+ends in `saved` too, or in `interrupted` when the browser left before the POS confirmed (the POS
+record then tells whether the file was saved).
+
 ## Security notes
 
 - Central only accepts clients in `DEA_ALLOW_CIDRS`: the VPN, plus the host itself. From
@@ -72,14 +101,23 @@ root's crontab; no system service. Shells run as `elvispos`. Remove with `ecli d
   register a store. Exec results are only accepted on the link the request went out on.
 - Traffic is plain `ws://`/`http://` and relies on the VPN for encryption.
 - Every server logs logins, terminal sessions (open/close, who, how long) and fleet commands:
-  `ecli logs dea` (or `docker service logs dea_agent`).
+  `~/com-elvispos-engine/logs/dea/dea-server.log` (rotated at 10 MB, 5 old files kept; set by
+  `DEA_LOG_DIR` in the compose file), also in `docker service logs dea_agent`. `ecli dea status`
+  shows the path.
 
 ## Working on the UI
 
 The web UI is an Angular app in `ui/` (standalone components and signals, one folder per screen:
 `fleet/`, `device/`, `terminal/`, `logs/`, `login/`; data access in `core/`, styles in
 `src/styles/`). `make dist` builds it into `web/dist`, which is embedded into `dea-server`.
-Needs Node 20+ (`cd ui && npm ci` once).
+Needs Node 22+ (`cd ui && nvm use && npm ci` once).
+
+Buttons, inputs, selects, the filter segments, the dialog, the row menu, tooltips and the logs
+table are [Optimus UI](https://github.com/openng-org/optimus-ui) components (the MIT community
+continuation of PrimeNG 21; docs at https://optimus.openng.org, icons `pi pi-*` from
+`@openng/icons`). Their colours come from the design-system tokens in `src/styles/_tokens.scss`
+through the preset in `src/app/core/optimus-theme.ts`: change a colour there and both the custom
+parts (fleet tree, meters, KPI tiles, terminal panes) and the components follow, in both themes.
 
 | Command (in `ui/`) | What it does |
 |---|---|

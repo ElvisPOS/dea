@@ -31,6 +31,7 @@
             ],
             "styles": [
               "node_modules/@xterm/xterm/css/xterm.css",
+              "node_modules/@openng/icons/openng-icons.css",
               "src/styles.scss"
             ],
             "outputPath": {
@@ -44,7 +45,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.5MB",
+                  "maximumWarning": "2MB",
                   "maximumError": "3MB"
                 },
                 {
@@ -69,7 +70,11 @@
                   "replace": "src/app/core/backend.provider.ts",
                   "with": "src/mock/backend.provider.mock.ts"
                 }
-              ]
+              ],
+              "outputPath": {
+                "base": "dist-mock",
+                "browser": ""
+              }
             }
           },
           "defaultConfiguration": "production"

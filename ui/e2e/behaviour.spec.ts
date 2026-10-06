@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { open, row } from './helpers';
+import { dropFiles, open, openTerminal, row } from './helpers';
 
 // What the UI must do, independently of how it looks.
 
@@ -60,4 +60,58 @@ test('login and wrong password', async ({ page }) => {
   await page.getByLabel('Password').fill('pw');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.locator('.rt-row').first()).toBeVisible();
+});
+
+test('the disk tooltip lists every mount', async ({ page }) => {
+  await open(page);
+  await row(page, '#1 CASSA 1').locator('dea-meter').nth(2).hover();
+  await expect(page.locator('.p-tooltip')).toContainText('/boot  95% of 471 MB');
+});
+
+test('the row menu opens the overview and offers removal for offline POS', async ({ page }) => {
+  await open(page);
+  await row(page, '#4 CASSA 4').locator('.rt-more').click();
+  await expect(page.locator('.row-menu')).toContainText('Remove from list');
+  await page.locator('.row-menu').getByText('Overview').click();
+  await expect(page.locator('.tab.on')).toContainText('#4 CASSA 4');
+});
+
+test('a file dropped on a terminal is uploaded to its folder', async ({ page }) => {
+  await open(page);
+  const cell = await openTerminal(page);
+  await dropFiles(page, cell, [{ name: 'price.csv', text: 'code;price\n1;2.50\n' }]);
+  await expect(cell.locator('.upload-status')).toContainText('price.csv uploaded to /home/elvispos');
+  await page.locator('.xterm-helper-textarea').first().pressSequentially('ls\n');
+  await expect(page.locator('.xterm-rows').first()).toContainText('price.csv');
+});
+
+test('uploading asks before replacing a file', async ({ page }) => {
+  await open(page);
+  const cell = await openTerminal(page);
+  await dropFiles(page, cell, [{ name: 'exists.txt', text: 'new' }]);
+  await expect(page.locator('.confirm-dialog')).toContainText('/home/elvispos/exists.txt already exists on the POS');
+  await page.getByRole('button', { name: 'Keep the old one' }).click();
+  await expect(cell.locator('.upload-status')).toContainText('the file on the POS was kept');
+
+  await dropFiles(page, cell, [{ name: 'exists.txt', text: 'new' }]);
+  await page.getByRole('button', { name: 'Replace' }).click();
+  await expect(cell.locator('.upload-status')).toContainText('exists.txt uploaded to /home/elvispos');
+});
+
+test('upload errors from the POS are shown', async ({ page }) => {
+  await open(page, { lang: 'it' });
+  const cell = await openTerminal(page);
+  await dropFiles(page, cell, [{ name: 'noperm.txt', text: 'x' }]);
+  await expect(cell.locator('.upload-status.is-error')).toContainText('nessun permesso di scrittura in /home/elvispos');
+});
+
+test('the Upload button sends several files', async ({ page }) => {
+  await open(page);
+  const cell = await openTerminal(page);
+  await cell.locator('input[type=file]').setInputFiles([
+    { name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('a') },
+    { name: 'b.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(600 << 10) },
+  ]);
+  await expect(cell.locator('.upload-status')).toContainText('b.bin uploaded to /home/elvispos (600 KB)');
+  await expect(cell.locator('.upload-status')).toContainText('2 of 2');
 });

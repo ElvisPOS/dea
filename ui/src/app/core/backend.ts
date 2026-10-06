@@ -11,9 +11,11 @@ export class Unauthorized extends Error {
 export interface TermSocket {
   binaryType: BinaryType;
   readonly readyState: number;
+  /** Bytes queued but not yet sent (uploads wait while it is high). */
+  readonly bufferedAmount: number;
   onmessage: ((ev: MessageEvent) => void) | null;
   onclose: ((ev: CloseEvent) => void) | null;
-  send(data: string | ArrayBufferLike | ArrayBufferView): void;
+  send(data: string | ArrayBuffer | Uint8Array<ArrayBuffer>): void;
   close(): void;
 }
 

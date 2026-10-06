@@ -162,5 +162,11 @@ func (s *server) relaySession(m proto.Msg) {
 		s.hub.sessionDelta(m.Agent, -1)
 		log.Printf("session close sid=%.8s agent=%s via=upstream after=%s", m.Session, m.Agent, time.Since(start).Round(time.Second))
 	}()
-	splice(up, down)
+	user := m.By // who opened the session on central, "user@address"
+	if user == "" {
+		user = "(central)"
+	}
+	uploads := newUploadAudit(hostname(), m.Agent, user, "upstream", m.Session[:min(8, len(m.Session))])
+	defer uploads.close()
+	splice(up, down, uploads.frame)
 }

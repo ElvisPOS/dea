@@ -103,13 +103,13 @@ export class MockBackend extends Backend {
   }
 }
 
-function fakeOutput(cmd: string, host: string): string {
+function fakeOutput(cmd: string, host: string, files: string[] = []): string {
   const c = cmd.trim();
   if (c === 'hostname') return `${host}\n`;
   if (c.startsWith('uptime')) return ' 09:41:07 up 6 days,  2:13,  0 users,  load average: 0.21, 0.18, 0.15\n';
   if (c.startsWith('df')) return 'Filesystem      Size  Used Avail Use% Mounted on\n/dev/sda1        73G  7.0G   62G  11% /\n';
   if (c.startsWith('whoami')) return 'elvispos\n';
-  if (c.startsWith('ls')) return 'client_agent  dea  elvisenv  gui  lib  startall  startvnc  stopall\n';
+  if (c.startsWith('ls')) return ['client_agent', 'dea', 'elvisenv', 'gui', 'lib', 'startall', 'startvnc', 'stopall', ...files].sort().join('  ') + '\n';
   return `(mock) ran: ${c}\n`;
 }
 
@@ -117,9 +117,14 @@ function fakeOutput(cmd: string, host: string): string {
 class FakeShell implements TermSocket {
   binaryType: BinaryType = 'arraybuffer';
   readyState: number = WebSocket.CONNECTING;
+  bufferedAmount = 0;
   onmessage: ((ev: MessageEvent) => void) | null = null;
   onclose: ((ev: CloseEvent) => void) | null = null;
   private line = '';
+  /** Files "uploaded" to the home folder, shown by ls. A file named exists.txt is
+   * already there; noperm.txt cannot be written. */
+  private files: string[] = ['exists.txt'];
+  private upload: { name: string; size: number; got: number; acked: number } | null = null;
   private enc = new TextEncoder();
   private prompt: string;
 
@@ -135,12 +140,19 @@ class FakeShell implements TermSocket {
     }, 250);
   }
 
-  send(data: string | ArrayBufferLike | ArrayBufferView) {
-    if (typeof data === 'string') return; // resize
+  send(data: string | ArrayBuffer | Uint8Array<ArrayBuffer>) {
+    if (typeof data === 'string') {
+      this.control(JSON.parse(data));
+      return;
+    }
+    if (this.upload) {
+      this.receive((data as Uint8Array).byteLength);
+      return;
+    }
     const text = new TextDecoder().decode(data as Uint8Array);
     for (const ch of text) {
       if (ch === '\r') {
-        const out = this.line.trim() === 'exit' ? '' : this.line.trim() ? fakeOutput(this.line, this.host).replace(/\n/g, '\r\n') : '';
+        const out = this.line.trim() === 'exit' ? '' : this.line.trim() ? fakeOutput(this.line, this.host, this.files).replace(/\n/g, '\r\n') : '';
         if (this.line.trim() === 'exit') {
           this.write('\r\nlogout\r\n');
           this.emitText(JSON.stringify({ type: 'exit', code: 0 }));
@@ -158,6 +170,38 @@ class FakeShell implements TermSocket {
         this.write(ch);
       }
     }
+  }
+
+  /** Upload messages, as the real agent answers them (resize is ignored). */
+  private control(m: { type: string; name?: string; size?: number; overwrite?: boolean }) {
+    const reply = (r: object) => setTimeout(() => this.emitText(JSON.stringify(r)), 60);
+    const path = `/home/elvispos/${m.name}`;
+    if (m.type === 'upload_cancel') this.upload = null;
+    if (m.type !== 'upload') return;
+    if (m.name === 'noperm.txt') {
+      reply({ type: 'upload_error', name: m.name, error: 'no permission to write in /home/elvispos' });
+    } else if (this.files.includes(m.name!) && !m.overwrite) {
+      reply({ type: 'upload_error', name: m.name, path, exists: true });
+    } else {
+      this.upload = { name: m.name!, size: m.size!, got: 0, acked: 0 };
+      reply({ type: 'upload_ready', name: m.name, path });
+      if (!m.size) this.receive(0);
+    }
+  }
+
+  private receive(n: number) {
+    const u = this.upload!;
+    u.got += n;
+    if (u.got < u.size) {
+      if (u.got - u.acked >= 256 << 10) {
+        u.acked = u.got;
+        this.emitText(JSON.stringify({ type: 'upload_progress', name: u.name, size: u.got }));
+      }
+      return;
+    }
+    this.upload = null;
+    if (!this.files.includes(u.name)) this.files.push(u.name);
+    setTimeout(() => this.emitText(JSON.stringify({ type: 'upload_done', name: u.name, path: `/home/elvispos/${u.name}`, size: u.size })), 60);
   }
 
   close() {

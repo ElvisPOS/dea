@@ -49,9 +49,9 @@
 
         @if (tabs.activeTerm(); as term) {
           <div class="layout-btns">
-            <button class="rt-btn sync-btn" [class.on]="term.sync()" [disabled]="term.shells().length < 2" [title]="(term.shells().length < 2 ? 'sync.disabled' : term.sync() ? 'sync.on' : 'sync.off') | t" (click)="term.setSync(!term.sync())">{{ 'sync.button' | t }}</button>
+            <button pButton severity="secondary" size="small" class="sync-btn" [class.on]="term.sync()" [disabled]="term.shells().length < 2" [pTooltip]="(term.shells().length < 2 ? 'sync.disabled' : term.sync() ? 'sync.on' : 'sync.off') | t" tooltipPosition="bottom" (click)="term.setSync(!term.sync())">{{ 'sync.button' | t }}</button>
             @for (n of [1, 2, 4]; track n) {
-              <button [class.on]="term.layout() === n" [title]="'layout.' + n | t" (click)="term.setLayout(n)">
+              <button class="layout-btn" [class.on]="term.layout() === n" [pTooltip]="'layout.' + n | t" tooltipPosition="bottom" [attr.aria-label]="'layout.' + n | t" (click)="term.setLayout(n)">
                 @switch (n) {
                   @case (1) {
                     <svg viewBox="0 0 16 12"><rect x="1" y="1" width="14" height="10" rx="1.5" /></svg>
@@ -69,15 +69,19 @@
         }
 
         <div class="bar-r">
-          <button type="button" class="rt-btn is-ghost theme-btn" [title]="'theme.toggle' | t" (click)="theme.toggle()">
-            <dea-icon [name]="theme.name() === 'light' ? 'moon' : 'sun'" />
-          </button>
-          <select class="lang-select rt-input" aria-label="Language" [ngModel]="i18n.lang()" (ngModelChange)="i18n.lang.set($event)">
-            @for (l of langs; track l) {
-              <option [value]="l">{{ l.toUpperCase() }}</option>
-            }
-          </select>
-          <button class="rt-btn" (click)="logout()">{{ 'signout' | t }}</button>
+          <button
+            pButton
+            type="button"
+            severity="secondary"
+            [text]="true"
+            [icon]="theme.name() === 'light' ? 'pi pi-moon' : 'pi pi-sun'"
+            [pTooltip]="'theme.toggle' | t"
+            tooltipPosition="bottom"
+            [attr.aria-label]="'theme.toggle' | t"
+            (click)="theme.toggle()"
+          ></button>
+          <p-select class="lang-select" ariaLabel="Language" [options]="langOptions" optionLabel="label" optionValue="value" [ngModel]="i18n.lang()" (ngModelChange)="i18n.lang.set($event)" />
+          <button pButton severity="secondary" (click)="logout()">{{ 'signout' | t }}</button>
         </div>
       </header>
 
@@ -96,7 +100,10 @@
                 <dea-term-tab [tab]="tab.term" />
               }
               @case ('logs') {
-                <dea-logs-page [agentKey]="tab.agentKey" [label]="tab.label" />
+                <!-- loaded on first use: the table component is the largest part of the UI kit -->
+                @defer {
+                  <dea-logs-page [agentKey]="tab.agentKey" [label]="tab.label" />
+                }
               }
             }
           </div>
@@ -104,5 +111,6 @@
       </div>
     </div>
     <dea-row-menu />
+    <p-confirmdialog styleClass="confirm-dialog" />
   }
 }

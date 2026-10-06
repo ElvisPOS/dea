@@ -24,8 +24,13 @@ UI_SRC := $(shell find ui/src ui/public -type f) ui/package-lock.json ui/angular
 
 ui: web/dist/index.html
 
-web/dist/index.html: $(UI_SRC)
-	cd ui && npm ci --no-audit --no-fund && npm run build
+web/dist/index.html: $(UI_SRC) ui/node_modules/.package-lock.json
+	cd ui && npm run build
+
+# reinstall the UI packages only when the lock file changed
+ui/node_modules/.package-lock.json: ui/package-lock.json
+	@node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' || (echo "the UI needs Node 22 or later: nvm install 22 (ui/.nvmrc)"; exit 1)
+	cd ui && npm ci --no-audit --no-fund
 
 vet: ui
 	go vet ./...

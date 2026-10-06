@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { open, row, shot } from './helpers';
+import { dropFiles, open, openTerminal, row, shot } from './helpers';
 
 // One reference screenshot per screen and state. A failing check means the
 // screen changed: look at the diff in the report (npm run check:report), then
@@ -41,7 +41,7 @@ test('fleet in Italian', async ({ page }) => {
 
 test('needs attention filter and collapsed store', async ({ page }) => {
   await open(page);
-  await page.locator('.rt-seg button', { hasText: 'Needs attention' }).click();
+  await page.locator('.filter').getByText('Needs attention').click();
   await page.locator('.rt-row[data-id="s:21"] .rt-caret').click();
   await expect(page).toHaveScreenshot('fleet-attention.png');
 });
@@ -49,20 +49,20 @@ test('needs attention filter and collapsed store', async ({ page }) => {
 test('row menu', async ({ page }) => {
   await open(page);
   await row(page, '#4 CASSA 4').locator('.rt-more').click();
-  await expect(page.locator('.menu')).toBeVisible();
+  await expect(page.locator('.row-menu')).toBeVisible();
   await expect(page).toHaveScreenshot('row-menu.png');
 });
 
 test('add store or POS', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: 'Add store or POS' }).click();
-  await expect(page.locator('dialog[open]')).toBeVisible();
+  await expect(page.locator('.add-dialog')).toBeVisible();
   await expect(page).toHaveScreenshot('add-dialog.png');
 });
 
 test('command on ticked POS', async ({ page }) => {
   await open(page);
-  await page.locator('.rt-row[data-id="s:12"] .rt-check').check();
+  await page.locator('.rt-row[data-id="s:12"] .rt-check input').check();
   await expect(page.locator('.bulk')).toContainText('5 POS selected (1 offline)');
   await page.locator('.bulk input').fill('hostname');
   await page.locator('.bulk').getByRole('button', { name: 'Run' }).click();
@@ -80,10 +80,16 @@ test('store overview', async ({ page }) => {
 test('four panes and the store rule', async ({ page }) => {
   await open(page);
   await row(page, '#1 CASSA 1').locator('.rt-act').nth(1).click();
-  await page.locator('.layout-btns button[title="Four terminals"]').click();
+  await page.getByRole('button', { name: 'Four terminals' }).click();
   // empty panes offer only POS of the same store (12)
-  const options = page.locator('.term-cell').nth(2).locator('option[value]:not([value=""])');
-  await expect(options).toHaveText(['#1 CASSA 1', '#2 CASSA 2', '#3 4POS VM', '#3 CASSA 3 SELF']);
+  const pick = page.locator('.term-cell').nth(2).locator('.pick');
+  await pick.click();
+  await expect(page.locator('.p-select-overlay .p-select-option')).toHaveText(['#1 CASSA 1', '#2 CASSA 2', '#3 4POS VM', '#3 CASSA 3 SELF']);
+  // a click outside closes it (only once its opening animation has ended, so retry)
+  await expect(async () => {
+    await page.locator('.term-cell').nth(2).locator('.term-empty p').click();
+    await expect(page.locator('.p-select-overlay')).toHaveCount(0, { timeout: 500 });
+  }).toPass();
   await expect(page).toHaveScreenshot('four-panes.png', shot(page));
 });
 
@@ -100,3 +106,21 @@ for (const scenario of ['central-only', 'store', 'empty', 'big'] as const) {
     await expect(page).toHaveScreenshot(`scenario-${scenario}.png`);
   });
 }
+
+test('dropping a file on a terminal', async ({ page }) => {
+  await open(page);
+  const cell = await openTerminal(page);
+  // not masked: without focus the terminal cursor does not blink
+  const still = async () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await dropFiles(page, cell, [{ name: 'price.csv', text: 'x' }], 'over');
+  await expect(cell.locator('.drop-overlay')).toBeVisible();
+  await still();
+  await expect(page).toHaveScreenshot('upload-drop.png');
+  await dropFiles(page, cell, [{ name: 'exists.txt', text: 'new' }]);
+  await expect(page.locator('.confirm-dialog')).toBeVisible();
+  await expect(page).toHaveScreenshot('upload-replace.png');
+  await page.getByRole('button', { name: 'Replace' }).click();
+  await expect(cell.locator('.upload-status')).toContainText('uploaded');
+  await still();
+  await expect(page).toHaveScreenshot('upload-done.png');
+});
