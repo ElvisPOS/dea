@@ -117,6 +117,7 @@ const toggles = {
 export const DeaPreset = definePreset(Aura, {
   components: {
     togglebutton: { root: { padding: '0.167rem' }, colorScheme: { light: toggles, dark: toggles } },
+    tooltip: { root: { maxWidth: '22rem', padding: '0.375rem 0.625rem', gutter: '0.5rem' } },
     button: { root: { label: { fontWeight: '500' } }, colorScheme: { light: buttons, dark: buttons } },
   },
   primitive: {

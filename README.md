@@ -62,11 +62,36 @@ ecli writes `dea.env` and adds
 root's crontab; no system service. Shells run as `elvispos`. Remove with `ecli dea uninstall`, check with
 `ecli dea status`. Logs: `/usr/share/elvispos/dea/log/dea-agent.log`.
 
+## Update to a new version
+
+`ecli dea install` is needed once per machine (and again only when ecli changes the setup). A new
+version is then just files copied into place; each program notices its replaced binary within a
+minute, checks that the new file runs (`-version`), waits until no terminal or screen is open (at
+most one hour) and restarts into it.
+
+1. Build: `make dist VERSION=v2.4.1` (Node 22 for the UI).
+2. On central, copy `dist/dea-server` to `~/com-elvispos-engine/bin/dea-server` and `dist/dea-agent`
+   to `~/com-elvispos-engine/share/RELEASE/elvispos/dea/dea-agent`. Central restarts into the new
+   server by itself (`ecli restart dea` does it at once).
+3. Store servers get both files from central with the server sync, and restart the same way.
+4. POS get the agent with the POS sync (`share/RELEASE` from their store, or from central when they
+   connect to it directly); the agent restarts into it by itself.
+
+Check with `ecli dea status`, or in the logs: `self-update: v2.4.1 found…`, then the new version's
+`listening` (server) or `dea-agent v2.4.1` (POS) line. A binary that does not run is ignored and
+logged; the running version stays. The compose file enables this with `DEA_SELF_UPDATE=1` and
+mounts the whole `bin/` folder (a file mount would keep showing the old binary); the agent does it
+unless `DEA_SELF_UPDATE=0` is in its `dea.env`. A reinstall keeps the POS name (`DEA_ID`) unless
+`--id` gives a new one.
+
 ## Upload a file to a POS
 
 Drop files on a terminal pane (or use **Upload** in its header): they are saved in the folder the
 terminal is in at that moment, i.e. where `cd` took you, as `elvispos`. DEA asks before replacing a
-file (a replaced file keeps its permissions), refuses folders (zip them) and files over 1 GB, and
+file; a replaced file keeps its permissions, and the old one is kept in a hidden folder next to it,
+by day: `<folder>/.dea-replaced/2026-10-06/price.csv` (a second replace the same day adds the time,
+`price.csv.143940`). It is a hard link, so it costs no time or space; if the old file cannot be
+kept, it is not replaced. DEA refuses folders (zip them) and files over 1 GB, and
 checks free space first. The file is written next to its target under a temporary name and renamed
 when complete, so a cancelled or broken upload leaves nothing behind.
 
@@ -80,7 +105,8 @@ Every upload is audited, from the request to its outcome, on both ends:
 - the server the user signed in to (and each store it passes through) logs every event in
   `logs/dea/dea-server.log` and writes one JSON line per event to `logs/dea/uploads.log` (10 MB,
   20 old files kept): user, browser address, POS, file name, size, overwrite asked, final path,
-  bytes sent, SHA-256 of the saved file, replaced file and its old size, duration, error;
+  bytes sent, SHA-256 of the saved file, whether it replaced a file (`replaced`, `old_size`,
+  `old_sha256`, and `backup`, where the old file was kept), duration, error;
 - the POS agent logs the same in `/usr/share/elvispos/dea/log/dea-agent.log` and
   `/usr/share/elvispos/dea/log/uploads.log`, with the DEA user who opened the terminal
   (`by: admin@10.8.0.5`, sent by central when the terminal opens).
@@ -90,6 +116,13 @@ Events: `requested`, `exists` (the user is asked to replace), `refused` (with th
 The agent never puts a file in place without its `saved` line and SHA-256. The server's record
 ends in `saved` too, or in `interrupted` when the browser left before the POS confirmed (the POS
 record then tells whether the file was saved).
+
+## Close the POS GUI
+
+A SCREEN pane has **Close GUI** after Ctrl+Alt+Del: after a confirmation it closes the cash register
+program (Chrome, started by ecli as `elvispos`) on that POS. It runs as a one-shot command through
+the usual command channel, so it is logged like any command: Chrome is asked to quit, and forced
+after 5 seconds. The pane then says *GUI closed*, *The GUI was not running*, or why it could not.
 
 ## Security notes
 

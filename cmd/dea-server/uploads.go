@@ -38,6 +38,8 @@ type uploadEvent struct {
 	SHA256     string    `json:"sha256,omitempty"`
 	Replaced   bool      `json:"replaced,omitempty"`
 	OldSize    int64     `json:"old_size,omitempty"`
+	OldSHA256  string    `json:"old_sha256,omitempty"`
+	Backup     string    `json:"backup,omitempty"` // where the POS kept the replaced file
 	Error      string    `json:"error,omitempty"`
 	DurationMS int64     `json:"duration_ms,omitempty"`
 }
@@ -85,6 +87,7 @@ func (u *uploadAudit) frame(down bool, mt int, data []byte) {
 		u.emit("started", "")
 	case !down && m.Type == proto.TypeUploadDone && u.cur != nil:
 		u.cur.Path, u.cur.SHA256, u.cur.Replaced, u.cur.OldSize = m.Path, m.SHA256, m.Replaced, m.OldSize
+		u.cur.OldSHA256, u.cur.Backup = m.OldSHA256, m.Backup
 		u.emit("saved", "")
 		u.cur = nil
 	case !down && m.Type == proto.TypeUploadError && u.cur != nil:
@@ -118,8 +121,8 @@ func (u *uploadAudit) emit(event, reason string) {
 	if event != "requested" {
 		e.DurationMS = time.Since(u.start).Milliseconds()
 	}
-	log.Printf("upload %s id=%s agent=%s user=%q from=%s file=%q size=%d overwrite=%v path=%q bytes=%d sha256=%s replaced=%v old_size=%d after=%s error=%q",
-		event, e.Session, e.Agent, e.User, e.From, e.Name, e.Size, e.Overwrite, e.Path, e.Bytes, e.SHA256, e.Replaced, e.OldSize,
+	log.Printf("upload %s id=%s agent=%s user=%q from=%s file=%q size=%d overwrite=%v path=%q bytes=%d sha256=%s replaced=%v old_size=%d old_sha256=%s backup=%q after=%s error=%q",
+		event, e.Session, e.Agent, e.User, e.From, e.Name, e.Size, e.Overwrite, e.Path, e.Bytes, e.SHA256, e.Replaced, e.OldSize, e.OldSHA256, e.Backup,
 		(time.Duration(e.DurationMS) * time.Millisecond).String(), e.Error)
 	if uploadLog != nil {
 		b, _ := json.Marshal(e)

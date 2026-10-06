@@ -26,6 +26,7 @@ export interface UploadState {
   saved: number; // bytes the POS has written
   phase: 'wait' | 'send' | 'done' | 'error';
   path?: string;
+  backup?: string; // where the POS kept the file this one replaced
   error?: string;
   index: number; // 1-based, of count
   count: number;
@@ -38,6 +39,22 @@ interface UploadMsg {
   size?: number;
   error?: string;
   exists?: boolean;
+  backup?: string;
+}
+
+/**
+ * Closes the POS GUI (Chrome, started by ecli as elvispos): asks it to quit, then
+ * forces it after 5 s. Exit 3 = it was not running, 4 = it could not be stopped.
+ */
+const CLOSE_GUI =
+  'pgrep -x chrome >/dev/null || exit 3; pkill -TERM -x chrome; ' +
+  'for i in 1 2 3 4 5; do sleep 1; pgrep -x chrome >/dev/null || exit 0; done; ' +
+  'pkill -KILL -x chrome; sleep 1; pgrep -x chrome >/dev/null && exit 4; exit 0';
+
+/** A short message shown at the bottom of a pane. */
+export interface PaneNotice {
+  text: string;
+  kind: 'busy' | 'done' | 'error';
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -221,7 +238,12 @@ export class TermSession {
       reply = await this.nextUploadMsg(10_000);
       if (!reply) return this.uploadFailed(file.name, t(this.ws?.readyState === WebSocket.OPEN ? 'upload.tooOld' : 'upload.notLive'));
       if (reply.type === 'upload_error' && reply.exists && !overwrite) {
-        overwrite = await this.deps.confirm(t('upload.exists', { path: reply.path }));
+        overwrite = await this.deps.confirm({
+          header: t('upload.existsTitle'),
+          message: t('upload.exists', { path: reply.path }),
+          accept: t('upload.replace'),
+          reject: t('upload.keep'),
+        });
         if (!overwrite) {
           this.upload.set({ ...st, phase: 'error', error: t('upload.kept', { name: file.name }) });
           return true; // skip this one, go on with the others
@@ -251,7 +273,7 @@ export class TermSession {
       const m = await this.nextUploadMsg(120_000);
       if (!m) return this.uploadFailed(file.name, t('upload.noAnswer'));
       if (m.type === 'upload_done') {
-        this.upload.set({ ...this.upload()!, phase: 'done', saved: file.size, path: m.path });
+        this.upload.set({ ...this.upload()!, phase: 'done', saved: file.size, path: m.path, backup: m.backup });
         return true;
       }
       if (m.type === 'upload_error') return this.uploadFailed(file.name, err(m.error || ''));
@@ -311,6 +333,9 @@ export class ScreenSession {
   readonly state = signal<ViewState>('wait');
   readonly viewOnly = signal(true);
   readonly message = signal<ScreenMessage | null>(null);
+  /** Result of an action on the POS (Close GUI). */
+  readonly notice = signal<PaneNotice | null>(null);
+  private noticeTimer?: ReturnType<typeof setTimeout>;
   readonly el = document.createElement('div');
   onInput?: undefined;
   twin?: View;
@@ -390,6 +415,34 @@ export class ScreenSession {
     if (!v) this.focus();
   }
 
+  /** Closes the GUI running on the POS screen, after asking. */
+  async closeGui() {
+    const { t, err } = this.deps;
+    const ok = await this.deps.confirm({
+      header: t('gui.closeTitle'),
+      message: t('gui.closeConfirm', { name: this.deps.keyLabel(this.agentKey) }),
+      accept: t('gui.close'),
+      reject: t('gui.keep'),
+      danger: true,
+    });
+    if (!ok) return;
+    clearTimeout(this.noticeTimer);
+    this.notice.set({ text: t('gui.closing'), kind: 'busy' });
+    let n: PaneNotice;
+    try {
+      const [r] = await this.deps.backend.exec([this.agentKey], CLOSE_GUI, 20);
+      const out = (r.output || '').trim().split('\n').pop() || '';
+      if (!r.ok) n = { text: t('gui.failed', { msg: err(r.error || '') }), kind: 'error' };
+      else if (r.code === 0) n = { text: t('gui.closed'), kind: 'done' };
+      else if (r.code === 3) n = { text: t('gui.notRunning'), kind: 'done' };
+      else n = { text: t('gui.stillRunning', { msg: out || `exit ${r.code}` }), kind: 'error' };
+    } catch (e) {
+      n = { text: t('gui.failed', { msg: err((e as Error).message) }), kind: 'error' };
+    }
+    this.notice.set(n);
+    if (n.kind === 'done') this.noticeTimer = setTimeout(() => this.notice.set(null), 6000);
+  }
+
   ctrlAltDel() {
     this.rfb?.sendCtrlAltDel();
     this.focus();
@@ -428,8 +481,8 @@ export interface ViewDeps {
   err: (msg: string) => string;
   keyLabel: (key: string) => string;
   live: Set<View>;
-  /** Asks a yes/no question (replace a file?) in a dialog. */
-  confirm: (message: string) => Promise<boolean>;
+  /** Asks a yes/no question (replace a file? close the GUI?) in a dialog. */
+  confirm: (q: { header: string; message: string; accept: string; reject: string; danger?: boolean }) => Promise<boolean>;
 }
 
 /** Creates terminal and screen views, and repaints terminals when the theme changes. */
@@ -445,14 +498,15 @@ export class Views {
     err: (m) => this.i18n.err(m),
     keyLabel: (k) => this.fleet.keyLabel(k),
     live: new Set(),
-    confirm: (message) =>
+    confirm: (q) =>
       new Promise<boolean>((resolve) =>
         this.confirmation.confirm({
-          header: this.i18n.t('upload.existsTitle'),
-          message,
+          header: q.header,
+          message: q.message,
           icon: 'pi pi-exclamation-triangle',
-          acceptLabel: this.i18n.t('upload.replace'),
-          rejectLabel: this.i18n.t('upload.keep'),
+          acceptLabel: q.accept,
+          rejectLabel: q.reject,
+          acceptButtonProps: q.danger ? { severity: 'danger' } : undefined,
           rejectButtonProps: { severity: 'secondary', outlined: true },
           accept: () => resolve(true),
           reject: () => resolve(false),

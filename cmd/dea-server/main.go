@@ -19,6 +19,7 @@ import (
 
 	"dea/internal/logfile"
 	"dea/internal/proto"
+	"dea/internal/selfupdate"
 	"dea/internal/sysstat"
 )
 
@@ -53,6 +54,10 @@ func env(k, def string) string {
 }
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+		println(version)
+		return
+	}
 	// DEA_LOG_DIR: also write the log to <dir>/dea-server.log (10 MB, 5 old files
 	// kept; docker service logs keeps working) and the upload audit trail to
 	// <dir>/uploads.log (10 MB, 20 old files kept).
@@ -128,6 +133,11 @@ func main() {
 	go s.runSelfStats()
 	if len(cfg.AllowNets) > 0 {
 		log.Printf("accepting connections only from %s", os.Getenv("DEA_ALLOW_CIDRS"))
+	}
+	// DEA_SELF_UPDATE=1 (set in the compose file): a new bin/dea-server copied in
+	// place takes over by itself; Docker's restart policy starts the new file
+	if os.Getenv("DEA_SELF_UPDATE") == "1" {
+		selfupdate.Watch(version, func() int { return int(s.hub.open.Load()) }, func() { os.Exit(0) })
 	}
 	log.Printf("dea-server %s listening on %s", version, cfg.Listen)
 	srv := &http.Server{Addr: cfg.Listen, Handler: s.allowlist(s.routes()), ReadHeaderTimeout: 10 * time.Second}

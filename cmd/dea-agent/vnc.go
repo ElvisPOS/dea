@@ -28,6 +28,8 @@ func (a *agent) vncCheckResult() proto.Msg {
 }
 
 func (a *agent) vncSession(m proto.Msg) {
+	openSessions.Add(1)
+	defer openSessions.Add(-1)
 	raw, err := a.dial("/api/agent/session?sid=" + m.Session)
 	if err != nil {
 		log.Printf("vnc %.8s: dial: %v", m.Session, err)

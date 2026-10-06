@@ -88,9 +88,11 @@ type Msg struct {
 	Overwrite bool   `json:"overwrite,omitempty"`
 	Path      string `json:"path,omitempty"`
 	Exists    bool   `json:"exists,omitempty"`
-	SHA256    string `json:"sha256,omitempty"`   // upload_done: of the saved file
-	Replaced  bool   `json:"replaced,omitempty"` // upload_done: an existing file was replaced
-	OldSize   int64  `json:"old_size,omitempty"` // upload_done: size of the replaced file
+	SHA256    string `json:"sha256,omitempty"`     // upload_done: of the saved file
+	Replaced  bool   `json:"replaced,omitempty"`   // upload_done: an existing file was replaced
+	OldSize   int64  `json:"old_size,omitempty"`   // upload_done: size of the replaced file
+	OldSHA256 string `json:"old_sha256,omitempty"` // upload_done: of the replaced file
+	Backup    string `json:"backup,omitempty"`     // upload_done: where the replaced file was kept
 
 	// stats (agent), agents (store): resource usage of the sending host
 	Stats *Stats `json:"stats,omitempty"`

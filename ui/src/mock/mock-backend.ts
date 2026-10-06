@@ -124,7 +124,7 @@ class FakeShell implements TermSocket {
   /** Files "uploaded" to the home folder, shown by ls. A file named exists.txt is
    * already there; noperm.txt cannot be written. */
   private files: string[] = ['exists.txt'];
-  private upload: { name: string; size: number; got: number; acked: number } | null = null;
+  private upload: { name: string; size: number; got: number; acked: number; replacing: boolean } | null = null;
   private enc = new TextEncoder();
   private prompt: string;
 
@@ -183,7 +183,7 @@ class FakeShell implements TermSocket {
     } else if (this.files.includes(m.name!) && !m.overwrite) {
       reply({ type: 'upload_error', name: m.name, path, exists: true });
     } else {
-      this.upload = { name: m.name!, size: m.size!, got: 0, acked: 0 };
+      this.upload = { name: m.name!, size: m.size!, got: 0, acked: 0, replacing: this.files.includes(m.name!) };
       reply({ type: 'upload_ready', name: m.name, path });
       if (!m.size) this.receive(0);
     }
@@ -201,7 +201,8 @@ class FakeShell implements TermSocket {
     }
     this.upload = null;
     if (!this.files.includes(u.name)) this.files.push(u.name);
-    setTimeout(() => this.emitText(JSON.stringify({ type: 'upload_done', name: u.name, path: `/home/elvispos/${u.name}`, size: u.size })), 60);
+    const backup = u.replacing ? `/home/elvispos/.dea-replaced/${new Date().toISOString().slice(0, 10)}/${u.name}` : undefined;
+    setTimeout(() => this.emitText(JSON.stringify({ type: 'upload_done', name: u.name, path: `/home/elvispos/${u.name}`, size: u.size, replaced: !!backup, backup })), 60);
   }
 
   close() {

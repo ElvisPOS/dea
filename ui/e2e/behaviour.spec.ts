@@ -95,7 +95,7 @@ test('uploading asks before replacing a file', async ({ page }) => {
 
   await dropFiles(page, cell, [{ name: 'exists.txt', text: 'new' }]);
   await page.getByRole('button', { name: 'Replace' }).click();
-  await expect(cell.locator('.upload-status')).toContainText('exists.txt uploaded to /home/elvispos');
+  await expect(cell.locator('.upload-status')).toContainText('exists.txt replaced in /home/elvispos (3 B); the old one is kept in .dea-replaced/2026-10-06/exists.txt');
 });
 
 test('upload errors from the POS are shown', async ({ page }) => {
@@ -114,4 +114,32 @@ test('the Upload button sends several files', async ({ page }) => {
   ]);
   await expect(cell.locator('.upload-status')).toContainText('b.bin uploaded to /home/elvispos (600 KB)');
   await expect(cell.locator('.upload-status')).toContainText('2 of 2');
+});
+
+test('Close GUI needs control, asks first, then closes the GUI on the POS', async ({ page }) => {
+  await open(page);
+  await openTerminal(page);
+  const screen = page.locator('.term-cell').nth(1);
+  // only while in control of the screen
+  await expect(screen.getByRole('button', { name: 'Close GUI' })).toBeDisabled();
+  await screen.getByRole('button', { name: 'Take control' }).click();
+  await screen.getByRole('button', { name: 'Close GUI' }).click();
+  await expect(page.locator('.confirm-dialog')).toContainText('This closes the cash register program (Chrome) on 001707 AMACO Fiume Veneto › #3 4POS VM');
+  await page.getByRole('button', { name: 'Keep it open' }).click();
+  await expect(screen.locator('.upload-status')).toHaveCount(0);
+  await screen.getByRole('button', { name: 'Close GUI' }).click();
+  await page.locator('.confirm-dialog').getByRole('button', { name: 'Close GUI' }).click();
+  await expect(screen.locator('.upload-status')).toContainText('GUI closed');
+});
+
+test('tooltips wrap and stay on screen', async ({ page }) => {
+  await open(page);
+  await openTerminal(page);
+  const take = page.locator('.term-cell').nth(1).getByRole('button', { name: 'Take control' });
+  await take.hover();
+  const tip = page.locator('.p-tooltip');
+  await expect(tip).toContainText('Watching only');
+  const box = (await tip.boundingBox())!;
+  expect(box.width).toBeGreaterThan(200);
+  expect(box.x + box.width).toBeLessThanOrEqual(1440);
 });

@@ -120,7 +120,7 @@ test('dropping a file on a terminal', async ({ page }) => {
   await expect(page.locator('.confirm-dialog')).toBeVisible();
   await expect(page).toHaveScreenshot('upload-replace.png');
   await page.getByRole('button', { name: 'Replace' }).click();
-  await expect(cell.locator('.upload-status')).toContainText('uploaded');
+  await expect(cell.locator('.upload-status.is-done')).toContainText('replaced in');
   await still();
   await expect(page).toHaveScreenshot('upload-done.png');
 });

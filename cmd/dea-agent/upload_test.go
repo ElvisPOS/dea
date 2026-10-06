@@ -67,8 +67,33 @@ func TestUploadAsksBeforeReplacing(t *testing.T) {
 	if string(b) != "new" || st.Mode().Perm() != 0o755 {
 		t.Fatalf("got %q mode %v; want the new content and the old mode", b, st.Mode().Perm())
 	}
-	if e := u.event("saved", "s1", "", ""); !e.Replaced || e.OldSize != 3 {
+	e := u.event("saved", "s1", "", "")
+	oldSum := sha256.Sum256([]byte("old"))
+	if !e.Replaced || e.OldSize != 3 || e.OldSHA256 != hex.EncodeToString(oldSum[:]) {
 		t.Fatalf("replace not recorded: %+v", e)
+	}
+	// the old file is kept in .dea-replaced/<day>/, with its mode
+	day := filepath.Join(dir, backupDir, time.Now().Format("2006-01-02"))
+	if e.Backup != filepath.Join(day, "run.sh") {
+		t.Fatalf("backup at %q", e.Backup)
+	}
+	kept, _ := os.ReadFile(e.Backup)
+	if st, _ := os.Stat(e.Backup); string(kept) != "old" || st.Mode().Perm() != 0o755 {
+		t.Fatalf("kept %q", kept)
+	}
+	// replaced again the same day: the earlier version is not overwritten
+	u, _, _ = startUpload(dir, proto.Msg{Name: "run.sh", Size: 5, Overwrite: true})
+	u.write([]byte("newer"))
+	if err := u.finish(); err != nil {
+		t.Fatal(err)
+	}
+	if u.backup == e.Backup {
+		t.Fatal("second backup overwrote the first")
+	}
+	again, _ := os.ReadFile(u.backup)
+	first, _ := os.ReadFile(e.Backup)
+	if string(again) != "new" || string(first) != "old" {
+		t.Fatalf("backups %q and %q", first, again)
 	}
 }
 

@@ -19,16 +19,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
 
 	"dea/internal/logfile"
 	"dea/internal/proto"
+	"dea/internal/selfupdate"
 	"dea/internal/sysstat"
 )
 
 var version = "dev"
+
+// openSessions counts terminals, screens and log downloads in progress.
+var openSessions atomic.Int32
 
 type agent struct {
 	server string // ws(s)://host:port
@@ -54,6 +59,11 @@ func main() {
 	// stdout goes to log/dea-agent.log (see the start script): stamp every line
 	log.SetFlags(log.LstdFlags)
 	openUploadLog()
+	// a new dea-agent copied over this one (by the POS sync from share/RELEASE)
+	// takes over by itself: exit, and the start script's loop runs the new file
+	if os.Getenv("DEA_SELF_UPDATE") != "0" {
+		selfupdate.Watch(version, func() int { return int(openSessions.Load()) }, func() { os.Exit(0) })
+	}
 	if *server == "" || *token == "" {
 		log.Fatal("DEA_SERVER and DEA_TOKEN are required")
 	}

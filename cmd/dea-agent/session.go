@@ -21,6 +21,8 @@ import (
 // session runs an interactive login shell on a PTY and streams it over a
 // dedicated WebSocket back to the server.
 func (a *agent) session(open proto.Msg) {
+	openSessions.Add(1)
+	defer openSessions.Add(-1)
 	raw, err := a.dial("/api/agent/session?sid=" + open.Session)
 	if err != nil {
 		log.Printf("session %.8s: dial: %v", open.Session, err)
@@ -222,7 +224,8 @@ func (a *agent) receive(c *conn, sid, by string, up *upload, data []byte) *uploa
 		}
 		ev := up.event("saved", sid, by, "")
 		auditUpload(ev)
-		c.send(proto.Msg{Type: proto.TypeUploadDone, Name: up.name, Path: up.path, Size: up.size, SHA256: ev.SHA256, Replaced: up.replaced, OldSize: up.oldSize})
+		c.send(proto.Msg{Type: proto.TypeUploadDone, Name: up.name, Path: up.path, Size: up.size, SHA256: ev.SHA256,
+			Replaced: up.replaced, OldSize: up.oldSize, OldSHA256: up.oldSHA256, Backup: up.backup})
 	}
 	return nil
 }

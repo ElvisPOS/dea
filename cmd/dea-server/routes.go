@@ -192,7 +192,7 @@ func (s *server) handleExec(w http.ResponseWriter, r *http.Request) {
 	if req.Timeout <= 0 || req.Timeout > 600 {
 		req.Timeout = 30
 	}
-	log.Printf("exec user=%q from=%s agents=%d cmd=%q", s.currentUser(r), r.RemoteAddr, len(req.Agents), req.Cmd)
+	log.Printf("exec user=%q from=%s agents=%d (%s) cmd=%q", s.currentUser(r), r.RemoteAddr, len(req.Agents), truncate(strings.Join(req.Agents, ","), 500), req.Cmd)
 
 	results := make([]execResult, len(req.Agents))
 	var wg sync.WaitGroup

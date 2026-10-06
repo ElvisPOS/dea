@@ -12,8 +12,8 @@
       @if (v) {
         <span class="dot" [class.wait]="v.state() === 'wait'" [class.on]="v.state() === 'live'" [class.dead]="v.state() === 'dead'"></span>
         <div class="kind-switch">
-          <button [class.on]="v.kind === 'term'" [pTooltip]="'pane.toTerm' | t" tooltipPosition="bottom" (click)="$event.stopPropagation(); tab().showKind(i, 'term')">{{ 'pane.openTerm' | t }}</button>
-          <button [class.on]="v.kind === 'screen'" [pTooltip]="'pane.toScreen' | t" tooltipPosition="bottom" (click)="$event.stopPropagation(); tab().showKind(i, 'screen')">{{ 'pane.openScreen' | t }}</button>
+          <button [class.on]="v.kind === 'term'" [pTooltip]="'pane.toTerm' | t" tooltipPosition="right" (click)="$event.stopPropagation(); tab().showKind(i, 'term')">{{ 'pane.openTerm' | t }}</button>
+          <button [class.on]="v.kind === 'screen'" [pTooltip]="'pane.toScreen' | t" tooltipPosition="right" (click)="$event.stopPropagation(); tab().showKind(i, 'screen')">{{ 'pane.openScreen' | t }}</button>
         </div>
         <span class="term-head-name" [title]="fleet.keyLabel(v.agentKey)">{{ fleet.keyLabel(v.agentKey) }}</span>
         <span class="spacer"></span>
@@ -22,6 +22,7 @@
             {{ (v.viewOnly() ? 'screen.control' : 'screen.viewOnly') | t }}
           </button>
           <button class="term-head-btn" [disabled]="v.viewOnly() || v.state() !== 'live'" (click)="$event.stopPropagation(); v.ctrlAltDel()">{{ 'screen.cad' | t }}</button>
+          <button class="term-head-btn is-danger" [disabled]="v.viewOnly() || v.notice()?.kind === 'busy'" [pTooltip]="(v.viewOnly() ? 'gui.closeNeedsControl' : 'gui.closeTip') | t" tooltipPosition="left" (click)="$event.stopPropagation(); v.closeGui()">{{ 'gui.close' | t }}</button>
         } @else {
           <span class="term-head-sync">{{ 'pane.syncBadge' | t }}</span>
           <button class="term-head-btn" [disabled]="v.state() !== 'live'" [pTooltip]="'upload.buttonTitle' | t" tooltipPosition="bottom" (click)="$event.stopPropagation(); picker.click()">
@@ -46,6 +47,15 @@
             <span>{{ 'upload.dropHint' | t }}</span>
           </div>
         }
+        @if (isScreen(v) && v.notice(); as n) {
+          <div class="upload-status" [class.is-error]="n.kind === 'error'" [class.is-done]="n.kind === 'done'" role="status">
+            <i [class]="n.kind === 'busy' ? 'pi pi-spin pi-spinner' : n.kind === 'done' ? 'pi pi-check' : 'pi pi-exclamation-triangle'"></i>
+            <span>{{ n.text }}</span>
+            @if (n.kind !== 'busy') {
+              <button pButton severity="secondary" size="small" [text]="true" icon="pi pi-times" [attr.aria-label]="'upload.dismiss' | t" (click)="v.notice.set(null)"></button>
+            }
+          </div>
+        }
         @if (!isScreen(v) && v.upload(); as u) {
           <div class="upload-status" [class.is-error]="u.phase === 'error'" [class.is-done]="u.phase === 'done'" role="status">
             @switch (u.phase) {
@@ -60,7 +70,11 @@
               }
               @case ('done') {
                 <i class="pi pi-check"></i>
-                <span>{{ 'upload.done' | t: { name: u.name, dir: dirOf(u.path), size: bytes(u.size) } }}</span>
+                @if (u.backup) {
+                  <span>{{ 'upload.doneReplaced' | t: { name: u.name, dir: dirOf(u.path), size: bytes(u.size), backup: relTo(u.path, u.backup) } }}</span>
+                } @else {
+                  <span>{{ 'upload.done' | t: { name: u.name, dir: dirOf(u.path), size: bytes(u.size) } }}</span>
+                }
               }
               @case ('error') {
                 <i class="pi pi-exclamation-triangle"></i>

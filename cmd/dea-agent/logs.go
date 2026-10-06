@@ -92,6 +92,8 @@ func (w wsWriter) Write(p []byte) (int, error) {
 
 // downloadLogs dials back a session and streams the requested log files as a .tar.gz.
 func (a *agent) downloadLogs(m proto.Msg) {
+	openSessions.Add(1)
+	defer openSessions.Add(-1)
 	raw, err := a.dial("/api/agent/session?sid=" + m.Session)
 	if err != nil {
 		log.Printf("logs %.8s: dial: %v", m.Session, err)

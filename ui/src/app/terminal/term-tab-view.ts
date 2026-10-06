@@ -140,6 +140,12 @@ export class TermTabView {
     return humanBytes(n);
   }
 
+  /** A kept copy's path, relative to the folder of the file it belonged to. */
+  protected relTo(path: string | undefined, backup: string) {
+    const dir = this.dirOf(path);
+    return dir && backup.startsWith(dir + '/') ? backup.slice(dir.length + 1) : backup;
+  }
+
   protected dirOf(path?: string) {
     return path ? path.slice(0, path.lastIndexOf('/')) || '/' : '';
   }

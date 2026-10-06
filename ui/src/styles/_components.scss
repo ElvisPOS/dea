@@ -79,6 +79,5 @@
 .rt-kpi.is-ok b { color: var(--ok-ink); }
 
 
-/* Optimus tooltips: one line per mount in the disk tip */
-.p-tooltip { max-width: 28rem; }
-.p-tooltip .p-tooltip-text { white-space: pre; font-size: 12px; }
+/* Optimus tooltips: long tips wrap; line breaks (one per mount in the disk tip) are kept */
+.p-tooltip .p-tooltip-text { white-space: pre-wrap; font-size: 12px; }

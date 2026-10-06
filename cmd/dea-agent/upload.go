@@ -51,6 +51,8 @@ type upload struct {
 	sum        hash.Hash // SHA-256 of what was written
 	replaced   bool      // the target existed and is being replaced
 	oldSize    int64
+	oldSHA256  string // of the replaced file
+	backup     string // where the replaced file was kept
 }
 
 // startUpload checks the request against dir and opens a temporary file next to the target.
@@ -117,6 +119,12 @@ func (u *upload) sha256() string { return hex.EncodeToString(u.sum.Sum(nil)) }
 
 // finish moves the file into place.
 func (u *upload) finish() error {
+	if u.replaced {
+		if err := u.keepOld(); err != nil {
+			u.abort()
+			return fmt.Errorf("the old file could not be kept, so it was not replaced: %w", err)
+		}
+	}
 	err := u.tmp.Chmod(u.mode)
 	if err == nil {
 		err = u.tmp.Sync()
@@ -131,6 +139,70 @@ func (u *upload) finish() error {
 		os.Remove(u.tmp.Name())
 	}
 	return err
+}
+
+// backupDir is the hidden folder, next to a replaced file, that keeps the old
+// versions: <folder>/.dea-replaced/<YYYY-MM-DD>/<name>.
+const backupDir = ".dea-replaced"
+
+// keepOld keeps the file about to be replaced in backupDir, by day. A hard link
+// costs no time or space (the rename then only moves the name); where links are
+// not possible the file is copied.
+func (u *upload) keepOld() error {
+	now := time.Now()
+	dir := filepath.Join(filepath.Dir(u.path), backupDir, now.Format("2006-01-02"))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	dst := filepath.Join(dir, u.name)
+	if _, err := os.Lstat(dst); err == nil { // replaced again the same day
+		dst = filepath.Join(dir, u.name+"."+now.Format("150405"))
+		for i := 2; ; i++ {
+			if _, err := os.Lstat(dst); err != nil {
+				break
+			}
+			dst = filepath.Join(dir, fmt.Sprintf("%s.%s-%d", u.name, now.Format("150405"), i))
+		}
+	}
+	if err := os.Link(u.path, dst); err != nil {
+		if err := copyFile(u.path, dst); err != nil {
+			os.Remove(dst)
+			return err
+		}
+	}
+	u.backup = dst
+	if f, err := os.Open(dst); err == nil {
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err == nil {
+			u.oldSHA256 = hex.EncodeToString(h.Sum(nil))
+		}
+		f.Close()
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	st, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, st.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chtimes(dst, st.ModTime(), st.ModTime())
 }
 
 // abort drops the partial file.
@@ -176,6 +248,8 @@ type uploadEvent struct {
 	SHA256     string    `json:"sha256,omitempty"`
 	Replaced   bool      `json:"replaced,omitempty"`
 	OldSize    int64     `json:"old_size,omitempty"`
+	OldSHA256  string    `json:"old_sha256,omitempty"`
+	Backup     string    `json:"backup,omitempty"` // where the replaced file was kept
 	Error      string    `json:"error,omitempty"`
 	DurationMS int64     `json:"duration_ms,omitempty"`
 }
@@ -186,8 +260,8 @@ func auditUpload(e uploadEvent) {
 	if len(e.Session) > 8 {
 		e.Session = e.Session[:8] // as the agent log prints it
 	}
-	log.Printf("upload %s session=%s by=%q file=%q size=%d path=%q bytes=%d sha256=%s replaced=%v old_size=%d after=%s error=%q",
-		e.Event, e.Session, e.By, e.Name, e.Size, e.Path, e.Bytes, e.SHA256, e.Replaced, e.OldSize,
+	log.Printf("upload %s session=%s by=%q file=%q size=%d path=%q bytes=%d sha256=%s replaced=%v old_size=%d old_sha256=%s backup=%q after=%s error=%q",
+		e.Event, e.Session, e.By, e.Name, e.Size, e.Path, e.Bytes, e.SHA256, e.Replaced, e.OldSize, e.OldSHA256, e.Backup,
 		(time.Duration(e.DurationMS) * time.Millisecond).String(), e.Error)
 	if uploadLog != nil {
 		b, _ := json.Marshal(e)
@@ -198,7 +272,7 @@ func auditUpload(e uploadEvent) {
 // event describes this upload for the audit.
 func (u *upload) event(name, sid, by, errText string) uploadEvent {
 	e := uploadEvent{Event: name, Session: sid, By: by, Name: u.name, Size: u.size, Path: u.path, Bytes: u.got,
-		Replaced: u.replaced, OldSize: u.oldSize, Error: errText, DurationMS: time.Since(u.start).Milliseconds()}
+		Replaced: u.replaced, OldSize: u.oldSize, OldSHA256: u.oldSHA256, Backup: u.backup, Error: errText, DurationMS: time.Since(u.start).Milliseconds()}
 	if name == "saved" {
 		e.SHA256 = u.sha256()
 	}

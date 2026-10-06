@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -52,6 +53,7 @@ type execWait struct {
 
 // Hub tracks agents and stores, pending terminal sessions and in-flight exec requests.
 type Hub struct {
+	open     atomic.Int32 // sessions spliced through this server (terminals, screens, relays)
 	mu       sync.Mutex
 	agents   map[string]*agent // by key: "pos" or "store/pos"
 	stores   map[string]*store
@@ -443,6 +445,7 @@ func (h *Hub) Send(key string, m proto.Msg) error {
 
 // sessionDelta counts sessions on direct agents; stores report their own counts.
 func (h *Hub) sessionDelta(key string, d int) {
+	h.open.Add(int32(d))
 	h.mu.Lock()
 	if a, ok := h.agents[key]; ok && a.via == "" {
 		a.sessions += d
